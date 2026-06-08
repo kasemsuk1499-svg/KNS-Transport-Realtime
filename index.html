@@ -652,16 +652,16 @@
 
     <aside class="todo-widget" id="todoWidget" aria-label="To Do List ประจำวัน">
       <div class="todo-head">
-        <div class="todo-title">☑ To Do List <span class="todo-count" id="todoCount">0/0</span></div>
+        <div class="todo-title">☑ To Do List รวม STP/PTR <span class="todo-count" id="todoCount">0/0</span></div>
         <button class="todo-toggle" id="todoToggleBtn" type="button">ย่อ</button>
       </div>
       <div class="todo-body">
         <div class="todo-add">
           <input id="todoTextInput" type="text" placeholder="เพิ่มงานใหม่..." />
           <select id="todoCategoryInput">
-            <option value="ระหว่างวัน">ระหว่างวัน</option>
-            <option value="เตรียมไว้ตอนเย็น">เตรียมไว้ตอนเย็น</option>
             <option value="ด่วน!!">ด่วน!!</option>
+            <option value="ระหว่างวัน" selected>ระหว่างวัน</option>
+            <option value="เตรียมไว้ตอนเย็น">เตรียมไว้ตอนเย็น</option>
           </select>
           <button id="todoAddBtn" class="good" type="button">+ เพิ่ม</button>
         </div>
@@ -804,7 +804,8 @@
     let saveTimers = new Map();
     let locationSyncTimer = null;
 
-    const TODO_CATEGORIES = ["ระหว่างวัน", "เตรียมไว้ตอนเย็น", "ด่วน!!"];
+    // เรียงหมวดให้ “ด่วน!!” อยู่บนสุดเสมอ และใช้ To Do ชุดเดียวร่วมกันทั้ง STP/PTR ตามวันที่
+    const TODO_CATEGORIES = ["ด่วน!!", "ระหว่างวัน", "เตรียมไว้ตอนเย็น"];
     const DEFAULT_TODOS = [
       { text:"เช็กจำนวนพาเลทส่งแจ้งเซลล์", category:"ระหว่างวัน" },
       { text:"ทำแผนปริ้นให้หน้างานและโฟล์กลิฟ", category:"ระหว่างวัน" },
@@ -814,7 +815,8 @@
       { text:"เช็คและเตรียมพาเลทคืนSTP", category:"ระหว่างวัน" },
       { text:"เขียนมือแยกตั๋ว", category:"ระหว่างวัน" },
       { text:"รับงานเข้าระบบและส่งรีพอทเรียบร้อย", category:"ระหว่างวัน" },
-      { text:"เช็กเมลก่อนกลับบ้านว่ามีขอแป้งคืนหรือแผนแซมไหม", category:"เตรียมไว้ตอนเย็น" }
+      { text:"เช็กเมลก่อนกลับบ้านว่ามีขอแป้งคืนหรือแผนแซมไหม", category:"เตรียมไว้ตอนเย็น" },
+      { text:"เช็คโลว่างก่อนกลับ", category:"เตรียมไว้ตอนเย็น" }
     ];
     let todoItems = [];
 
@@ -825,7 +827,21 @@
 
 
     function todoStorageKey(){
-      return `knsTransportTodo/${currentPage}/${currentDate}`;
+      // ใช้ key เดียวตามวันที่ เพื่อให้ STP และ PTR เห็น To Do ชุดเดียวกัน
+      return `knsTransportTodo/shared/${currentDate}`;
+    }
+
+    function legacyTodoStorageKey(page){
+      return `knsTransportTodo/${page}/${currentDate}`;
+    }
+
+    function readTodoListFromStorage(key){
+      try{
+        const value = JSON.parse(localStorage.getItem(key) || "null");
+        return Array.isArray(value) ? value : null;
+      }catch(_){
+        return null;
+      }
     }
 
     function makeTodoId(){
@@ -849,8 +865,32 @@
 
     function loadTodos(){
       const key = todoStorageKey();
-      let saved = null;
-      try{ saved = JSON.parse(localStorage.getItem(key) || "null"); }catch(_){ saved = null; }
+      let saved = readTodoListFromStorage(key);
+
+      // ย้ายข้อมูลเก่าที่เคยแยก STP/PTR มาใช้ร่วมกันอัตโนมัติ โดยไม่ทำให้รายการเดิมหาย
+      if(!saved){
+        const legacyItems = [
+          ...(readTodoListFromStorage(legacyTodoStorageKey("STP")) || []),
+          ...(readTodoListFromStorage(legacyTodoStorageKey("PTR")) || [])
+        ];
+        if(legacyItems.length){
+          const mergedById = new Map();
+          for(const item of legacyItems){
+            if(!item) continue;
+            const id = item.id || makeTodoId();
+            const previous = mergedById.get(id);
+            mergedById.set(id, {
+              ...(previous || {}),
+              ...item,
+              id,
+              done: !!item.done || !!previous?.done
+            });
+          }
+          saved = Array.from(mergedById.values());
+          localStorage.setItem(key, JSON.stringify(saved));
+        }
+      }
+
       if(Array.isArray(saved)){
         const byId = new Map(saved.map(item => [item.id, item]));
         const mergedDefaults = defaultTodoItems().map(item => ({ ...item, ...(byId.get(item.id) || {}) }));
@@ -866,7 +906,7 @@
       }else{
         todoItems = defaultTodoItems();
       }
-      renderTodos();
+      saveTodos();
     }
 
     function saveTodos(){
