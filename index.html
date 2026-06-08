@@ -209,11 +209,13 @@
     .col-num{min-width:120px}
     .col-remark{min-width:260px}
     .col-location{min-width:150px}
-    .col-actions{min-width:118px}
+    .col-actions{min-width:250px}
     .row-actions{
       display:flex;
       gap:5px;
       justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
       padding:5px;
     }
     .row-actions button{
@@ -222,6 +224,11 @@
       font-size:12px;
       border-radius:8px;
       box-shadow:none;
+      white-space:nowrap;
+    }
+    .product-input{
+      text-align:left;
+      padding-left:10px;
     }
     .location-cell{
       position:relative;
@@ -271,6 +278,17 @@
     .dirty{
       outline:2px solid #fdb022 !important;
       background:#fff7dc !important;
+    }
+    .saving{
+      outline:2px solid #2e90fa !important;
+      background:#eef6ff !important;
+    }
+    .saved-flash{
+      animation: savedFlash .75s ease-out 1;
+    }
+    @keyframes savedFlash{
+      0%{background:#dcfae6; outline:2px solid #12b76a;}
+      100%{background:transparent; outline:2px solid transparent;}
     }
     .sync-dot{
       display:inline-flex;
@@ -328,7 +346,7 @@
         <label>วันที่
           <input type="date" id="dateInput" />
         </label>
-        <button id="addRowBtn" class="good">+ เพิ่มแถว</button>
+        <button id="addRowBtn" class="good">+ เพิ่มคันท้ายสุด</button>
         <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
         <button id="importBtn" class="light">นำเข้า CSV</button>
         <button id="exportBtn" class="light">ส่งออก CSV</button>
@@ -349,16 +367,15 @@
         <div>
           <span id="syncDot" class="sync-dot"></span>
           <b id="syncText">กำลังเชื่อมต่อ...</b>
-          <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — พิมพ์ให้เสร็จก่อน แล้วกด Enter เพื่อบันทึกและซิงก์เรียลไทม์</span>
+          <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — พิมพ์ให้เสร็จก่อน แล้วกด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึกและซิงก์เรียลไทม์</span>
         </div>
-        <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • ช่องสีเหลืองอ่อน = ยังไม่บันทึก ต้องกด Enter</div>
+        <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • Product พิมพ์ค้นหาเลือกจากฐาน CSV ได้ • ช่องสีเหลืองอ่อน = ยังไม่บันทึก</div>
       </div>
 
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th class="col-date">Date</th>
               <th class="col-trip">No.</th>
               <th class="col-product">Product name</th>
               <th class="col-batch">Batch No.</th>
@@ -372,9 +389,10 @@
             </tr>
           </thead>
           <tbody id="tbody">
-            <tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูล...</td></tr>
+            <tr><td colspan="10" style="padding:18px">กำลังโหลดข้อมูล...</td></tr>
           </tbody>
         </table>
+        <datalist id="productList"></datalist>
       </div>
     </section>
   </main>
@@ -444,8 +462,10 @@
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
     let unsubscribe = null;
     let tankLocationUnsubscribe = null;
+    let productOptionsUnsubscribe = null;
     let rowsCache = [];
     let tankLocationCache = {};
+    let productOptionsCache = {};
     let saveTimers = new Map();
     let locationSyncTimer = null;
 
@@ -515,6 +535,18 @@
       return ref(db, `${pageRoot()}/tankLocations/${encodeTankKey(normalizedTank(tankCode))}`);
     }
 
+    function encodeProductKey(productName){
+      return encodeURIComponent(String(productName || '').trim()).replace(/\./g, '%2E');
+    }
+
+    function productOptionsRef(page=currentPage){
+      return ref(db, `${pageRoot(page)}/productOptions`);
+    }
+
+    function productOptionRef(productName){
+      return ref(db, `${pageRoot()}/productOptions/${encodeProductKey(productName)}`);
+    }
+
     function formatUpdateTime(ts){
       if(!ts) return '';
       const d = new Date(ts);
@@ -554,11 +586,19 @@
       document.title = `KNS ${currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
     }
 
+    function rowOrderValue(row, fallbackIndex=0){
+      const explicit = Number(row?.sortOrder);
+      if(Number.isFinite(explicit) && explicit > 0) return explicit;
+      const created = Number(row?.createdAt);
+      if(Number.isFinite(created) && created > 0) return created;
+      return fallbackIndex + 1;
+    }
+
     function sortRows(raw){
       return Object.entries(raw || {}).map(([id, data]) => ({ id, ...data })).sort((a,b) => {
         const ta = num(a.tripNo), tb = num(b.tripNo);
         if(ta !== tb) return ta - tb;
-        return (a.createdAt || 0) - (b.createdAt || 0);
+        return rowOrderValue(a) - rowOrderValue(b);
       });
     }
 
@@ -567,7 +607,13 @@
       applyPageUI();
       if(unsubscribe) unsubscribe();
       if(tankLocationUnsubscribe) tankLocationUnsubscribe();
-      tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
+      if(productOptionsUnsubscribe) productOptionsUnsubscribe();
+      tbody.innerHTML = `<tr><td colspan="10" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
+
+      productOptionsUnsubscribe = onValue(productOptionsRef(), (snap) => {
+        productOptionsCache = snap.val() || {};
+        renderProductDatalist();
+      });
 
       tankLocationUnsubscribe = onValue(tankLocationsRef(), (snap) => {
         tankLocationCache = snap.val() || {};
@@ -613,7 +659,33 @@
       if(field === "remark"){
         return `<textarea data-id="${row.id}" data-field="${field}">${escapeHtml(value)}</textarea>`;
       }
+      if(field === "productName"){
+        return `<input class="product-input" list="productList" autocomplete="off" placeholder="พิมพ์เพื่อค้นหา/เลือกสินค้า" data-id="${row.id}" data-field="${field}" type="text" value="${escapeAttr(value)}" />`;
+      }
       return `<input data-id="${row.id}" data-field="${field}" type="${type}" value="${escapeAttr(value)}" />`;
+    }
+
+    function renderProductDatalist(){
+      const list = $("productList");
+      if(!list) return;
+      const fromDb = Object.values(productOptionsCache || {})
+        .map(item => typeof item === "string" ? item : item?.name)
+        .filter(Boolean);
+      const fromRows = rowsCache.map(r => r.productName).filter(Boolean);
+      const names = Array.from(new Set([...fromDb, ...fromRows].map(v => String(v).trim()).filter(Boolean)))
+        .sort((a,b) => a.localeCompare(b, 'th'));
+      list.innerHTML = names.map(name => `<option value="${escapeAttr(name)}"></option>`).join("");
+    }
+
+    async function saveProductOption(productName){
+      const name = String(productName || '').trim();
+      if(!name) return;
+      await set(productOptionRef(name), {
+        name,
+        updatedAt: serverTimestamp(),
+        sourceDate: currentDate,
+        page: currentPage
+      });
     }
 
     function locationMetaFor(row){
@@ -653,7 +725,7 @@
     }
 
     function hasPendingEdit(){
-      return !!tbody.querySelector("input.dirty, textarea.dirty");
+      return !!tbody.querySelector("input.dirty, textarea.dirty, input.saving, textarea.saving");
     }
 
     function renderRows(){
@@ -662,20 +734,18 @@
         return;
       }
       if(!rowsCache.length){
-        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มแถว” เพื่อเริ่มใส่แผนขนย้าย</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="padding:18px">ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย</td></tr>`;
         return;
       }
       const locationSpans = buildLocationSpans(rowsCache);
       tbody.innerHTML = rowsCache.map((row, index) => {
         const prev = rowsCache[index - 1];
-        const isFirstDate = index === 0;
         const isGroupStart = index === 0 || String(prev?.tripNo ?? "") !== String(row.tripNo ?? "");
         const tripNum = num(row.tripNo);
         const spanInfo = locationSpans.get(row.id) || { show:true, span:1, count:1 };
         const classes = [tripNum % 2 === 0 ? "trip-alt" : "", isGroupStart ? "group-start" : ""].filter(Boolean).join(" ");
         return `
         <tr class="${classes}">
-          <td class="${isFirstDate ? "" : "visual-blank"}"><input data-id="${row.id}" data-field="dateText" value="${escapeAttr(isFirstDate ? (row.dateText || formatDateThaiLike(currentDate)) : "")}" /></td>
           <td class="${isGroupStart ? "" : "visual-blank"}">${isGroupStart ? inputCell(row,"tripNo","number") : `<input data-id="${row.id}" data-field="tripNo" type="number" value="${escapeAttr(row.tripNo ?? "")}" />`}</td>
           <td>${inputCell(row,"productName")}</td>
           <td>${inputCell(row,"batchNo")}</td>
@@ -687,12 +757,15 @@
           ${spanInfo.show ? locationCell(row, spanInfo.span, spanInfo.count) : ""}
           <td>
             <div class="row-actions">
+              <button class="good" data-action="insert-item" data-id="${row.id}" title="เพิ่มรายการสินค้าถัดจากแถวนี้">+ รายการ</button>
+              <button class="secondary" data-action="insert-trip" data-id="${row.id}" title="เพิ่มคันรถถัดจากคันนี้">+ คัน</button>
               <button class="light" data-action="dup" data-id="${row.id}" title="คัดลอกแถว">คัดลอก</button>
               <button class="danger" data-action="del" data-id="${row.id}" title="ลบแถว">ลบ</button>
             </div>
           </td>
         </tr>`;
       }).join("");
+      renderProductDatalist();
     }
 
     function escapeHtml(v){
@@ -796,17 +869,29 @@
       }
     }
 
-    async function addRow(prefill={}){
+    function nextDefaultSortOrder(){
+      if(!rowsCache.length) return Date.now();
+      const maxOrder = Math.max(...rowsCache.map((r,i) => rowOrderValue(r,i)));
+      return Math.max(Date.now(), maxOrder + 1000);
+    }
+
+    function orderBetween(prevOrder, nextOrder){
+      if(Number.isFinite(nextOrder) && nextOrder > prevOrder) return (prevOrder + nextOrder) / 2;
+      return prevOrder + 1000;
+    }
+
+    async function addRow(prefill={}, options={}){
       const nextTrip = rowsCache.length
         ? Math.max(...rowsCache.map(r => num(r.tripNo))) + 1
         : 1;
       const tank = normalizedTank(prefill.tankCode ?? "");
       const knownLocation = tank ? await getKnownLocation(tank) : null;
+      const productName = prefill.productName ?? "";
       const newRef = push(dateRef(currentDate));
       await set(newRef, {
         dateText: formatDateThaiLike(currentDate),
         tripNo: prefill.tripNo ?? nextTrip,
-        productName: prefill.productName ?? "",
+        productName,
         batchNo: prefill.batchNo ?? "",
         tankCode: tank || (prefill.tankCode ?? ""),
         bags: prefill.bags ?? "",
@@ -815,27 +900,88 @@
         remark: prefill.remark ?? "Plastic pallet (60)",
         location: knownLocation?.location ?? prefill.location ?? "",
         locationUpdatedAt: knownLocation?.updatedAt ?? null,
+        sortOrder: options.sortOrder ?? prefill.sortOrder ?? nextDefaultSortOrder(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+      if(productName) await saveProductOption(productName);
+    }
+
+    async function insertItemAfter(id){
+      const index = rowsCache.findIndex(r => r.id === id);
+      const row = rowsCache[index];
+      if(!row) return;
+      const currentOrder = rowOrderValue(row, index);
+      const nextSameTripIndex = rowsCache.findIndex((r,i) => i > index && String(r.tripNo ?? '') === String(row.tripNo ?? ''));
+      const nextOrder = nextSameTripIndex >= 0 ? rowOrderValue(rowsCache[nextSameTripIndex], nextSameTripIndex) : NaN;
+      await addRow({
+        tripNo: row.tripNo,
+        productName: "",
+        batchNo: "",
+        tankCode: "",
+        bags: "",
+        kg: "",
+        pallets: "",
+        remark: row.remark || "Plastic pallet (60)",
+        location: ""
+      }, { sortOrder: orderBetween(currentOrder, nextOrder) });
+    }
+
+    async function insertTripAfter(id){
+      const row = rowsCache.find(r => r.id === id);
+      if(!row) return;
+      const baseTrip = num(row.tripNo);
+      const updates = {};
+      for(const r of rowsCache){
+        const trip = num(r.tripNo);
+        if(trip > baseTrip){
+          updates[`${r.id}/tripNo`] = trip + 1;
+          updates[`${r.id}/updatedAt`] = serverTimestamp();
+        }
+      }
+      if(Object.keys(updates).length) await update(rowsRootRef(), updates);
+      await addRow({
+        tripNo: baseTrip + 1,
+        productName: "",
+        batchNo: "",
+        tankCode: "",
+        bags: "",
+        kg: "",
+        pallets: "",
+        remark: "Plastic pallet (60)",
+        location: ""
+      }, { sortOrder: nextDefaultSortOrder() });
     }
 
     function markUnsaved(el){
       el.classList.add("dirty");
-      el.title = "ยังไม่บันทึก: กด Enter เพื่อบันทึก";
+      el.classList.remove("saved-flash");
+      el.dataset.pendingValue = el.value;
+      el.title = "ยังไม่บันทึก: กด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึก";
     }
 
-    async function commitSave(el){
+    function discardUnsaved(el){
+      el.classList.remove("dirty", "saving");
+      delete el.dataset.pendingValue;
+      renderRows();
+    }
+
+    async function commitSave(el, keepFocus=false){
       const id = el.dataset.id;
       const field = el.dataset.field;
-      if(!id || !field) return;
+      if(!id || !field || el.dataset.saving === "1") return;
 
       const key = `${id}:${field}`;
       clearTimeout(saveTimers.get(key));
 
-      el.disabled = true;
+      const rawValue = el.value;
+      el.dataset.saving = "1";
+      el.classList.remove("dirty");
+      el.classList.add("saving");
+      el.title = "กำลังบันทึก...";
+
       try{
-        let value = el.value;
+        let value = rawValue;
         if(["tripNo","bags","kg","pallets"].includes(field)){
           value = value === "" ? "" : Number(value);
         }
@@ -850,17 +996,34 @@
           if(field === "tankCode"){
             await applyLocationAfterTankChange(id, saveValue);
           }
+          if(field === "productName"){
+            await saveProductOption(saveValue);
+          }
         }
-        el.classList.remove("dirty");
-        el.title = "บันทึกแล้ว";
-        renderRows();
+        el.classList.remove("saving");
+        el.classList.add("saved-flash");
+        el.title = "บันทึกแล้ว / ซิงก์เรียลไทม์แล้ว";
+        delete el.dataset.pendingValue;
         renderTotals();
+
+        // ถ้าบันทึกด้วย Enter ให้ render ใหม่เพื่อจัดกลุ่ม/รวม Location ทันที
+        // ถ้าบันทึกด้วย blur ปล่อยให้ onValue จาก Firebase render ตามข้อมูลจริง
+        if(keepFocus){
+          renderRows();
+          const next = tbody.querySelector(`[data-id="${CSS.escape(id)}"][data-field="${CSS.escape(field)}"]`);
+          if(next){
+            next.focus();
+            if(typeof next.select === "function") next.select();
+          }
+        }
       }catch(err){
         console.error(err);
+        el.classList.remove("saving");
+        el.classList.add("dirty");
+        el.title = "บันทึกไม่สำเร็จ: กด Enter อีกครั้ง";
         alert("บันทึกไม่สำเร็จ กรุณาลองกด Enter อีกครั้ง");
       }finally{
-        el.disabled = false;
-        el.focus();
+        delete el.dataset.saving;
       }
     }
 
@@ -881,10 +1044,9 @@
     }
 
     function toCSV(rows){
-      const head = ["Page","Date","No","Product name","Batch No","Tank code","Quantity bag","Quantity Kg","Quantity pallet","Remark","Location"];
+      const head = ["Page","No","Product name","Batch No","Tank code","Quantity bag","Quantity Kg","Quantity pallet","Remark","Location"];
       const lines = rows.map(r => [
         currentPage,
-        r.dateText || formatDateThaiLike(currentDate),
         r.tripNo, r.productName, r.batchNo, r.tankCode,
         r.bags, r.kg, r.pallets, r.remark, (locationMetaFor(r).location ?? r.location)
       ].map(csvCell).join(","));
@@ -1025,6 +1187,7 @@
       for(const row of rows){
         await addRow(row);
       }
+      await Promise.all(Array.from(new Set(rows.map(r => String(r.productName || '').trim()).filter(Boolean))).map(saveProductOption));
     }
 
     async function copyYesterday(){
@@ -1060,13 +1223,28 @@
         // ช่อง Remark เป็น textarea: กด Enter = บันทึก, กด Shift+Enter = ขึ้นบรรทัดใหม่
         if(el.tagName === "TEXTAREA" && e.shiftKey) return;
         e.preventDefault();
-        commitSave(el);
+        commitSave(el, true);
       }
+      if(e.key === "Escape" && el.classList.contains("dirty")){
+        e.preventDefault();
+        discardUnsaved(el);
+      }
+    });
+
+    tbody.addEventListener("focusout", (e) => {
+      const el = e.target.closest("input, textarea");
+      if(!el?.dataset?.id || !el.classList.contains("dirty")) return;
+      // Tab หรือคลิกออกจากช่อง = ถือว่าพิมพ์เสร็จแล้ว ให้บันทึกและซิงก์
+      setTimeout(() => {
+        if(el.classList.contains("dirty")) commitSave(el, false);
+      }, 120);
     });
 
     tbody.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
       if(!btn) return;
+      if(btn.dataset.action === "insert-item") insertItemAfter(btn.dataset.id);
+      if(btn.dataset.action === "insert-trip") insertTripAfter(btn.dataset.id);
       if(btn.dataset.action === "dup") duplicateRow(btn.dataset.id);
       if(btn.dataset.action === "del") deleteRow(btn.dataset.id);
     });
