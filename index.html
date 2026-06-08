@@ -18,6 +18,13 @@
       --ok:#188038;
       --blue:#0b72b9;
       --purple:#7a3ee6;
+      --ptr-bg:#f1fbf4;
+      --ptr-card:#fbfffc;
+      --ptr-line:#b7dec5;
+      --ptr-head:#d9f5df;
+      --ptr-accent:#9fd9ae;
+      --ptr-text:#12301d;
+      --ptr-soft:#eaf8ee;
       --shadow:0 8px 22px rgba(20,40,60,.10);
       --radius:14px;
     }
@@ -111,8 +118,48 @@
       border-color:var(--blue);
     }
     .page-tab[data-page="PTR"].active{
-      background:var(--purple);
-      border-color:var(--purple);
+      background:#75bd86;
+      border-color:#75bd86;
+      color:#0f2f18;
+    }
+    body[data-page="PTR"]{
+      background:linear-gradient(180deg, var(--ptr-bg), #f7fff9);
+      color:var(--ptr-text);
+    }
+    body[data-page="PTR"] header{
+      background:rgba(248,255,250,.94);
+      border-bottom-color:var(--ptr-line);
+    }
+    body[data-page="PTR"] button{
+      background:#68b87b;
+      color:#0f2f18;
+    }
+    body[data-page="PTR"] button.secondary{background:#6f8f78;color:#fff}
+    body[data-page="PTR"] button.good{background:#5fb878;color:#0f2f18}
+    body[data-page="PTR"] button.danger{background:#d92d20;color:#fff}
+    body[data-page="PTR"] button.light,
+    body[data-page="PTR"] .page-tab{
+      background:#f0faf3;
+      border-color:var(--ptr-line);
+      color:#173f24;
+    }
+    body[data-page="PTR"] .stat,
+    body[data-page="PTR"] .panel{
+      background:var(--ptr-card);
+      border-color:var(--ptr-line);
+      box-shadow:0 8px 22px rgba(45,120,70,.10);
+    }
+    body[data-page="PTR"] .panel-head{border-bottom-color:var(--ptr-line)}
+    body[data-page="PTR"] th{background:var(--ptr-head)}
+    body[data-page="PTR"] th.location{background:#c9efb8}
+    body[data-page="PTR"] tr.trip-alt td{background:#e8f7ed}
+    body[data-page="PTR"] .location-cell{background:#f3ffe9}
+    body[data-page="PTR"] .location-meta{color:#376b2b}
+    body[data-page="PTR"] input:focus,
+    body[data-page="PTR"] textarea:focus,
+    body[data-page="PTR"] select:focus{
+      outline-color:#63b36f;
+      background:#ffffff;
     }
     main{
       max-width:1500px;
@@ -235,11 +282,28 @@
       position:relative;
       min-width:170px;
       background:#fffde8;
+      transition:background-color .2s ease;
     }
     .location-cell input{
       font-weight:700;
       min-height:46px;
       padding-bottom:18px;
+    }
+    tr.export-row td{
+      background:#fff3a3 !important;
+    }
+    tr.export-row input,
+    tr.export-row textarea,
+    tr.export-row select{
+      background:#fff3a3 !important;
+    }
+    .location-cell.location-export input{
+      color:#d92d20;
+      font-weight:900;
+    }
+    .location-cell.location-export .location-meta{
+      color:#9a3412;
+      font-weight:700;
     }
     .location-meta{
       position:absolute;
@@ -257,17 +321,16 @@
     .location-updated{
       animation: locationPulse 1.4s ease-in-out infinite;
       box-shadow: inset 0 0 0 3px #f79009;
-      background:#fff2cc !important;
     }
     .location-updated input{
-      background:#fff2cc !important;
+      background:transparent !important;
     }
     .location-merged-note{
       display:inline-block;
       margin-top:2px;
       padding:2px 6px;
       border-radius:999px;
-      background:#fff0b3;
+      background:var(--location-meta-bg, #fff0b3);
       color:#7a4b00;
       font-size:10px;
       font-weight:700;
@@ -589,6 +652,30 @@
       });
     }
 
+    function getDisplayLocation(row){
+      const key = encodeTankKey(normalizedTank(row?.tankCode));
+      const meta = tankLocationCache[key] || {};
+      return String(meta.location ?? row?.location ?? '').trim();
+    }
+
+    function hasExportLocation(row){
+      return getDisplayLocation(row).includes('ส่งออก');
+    }
+
+    function locationColorStyle(locationText){
+      const text = String(locationText || '').trim();
+      if(!text) return '';
+      let hash = 0;
+      for(let i = 0; i < text.length; i++){
+        hash = ((hash << 5) - hash) + text.charCodeAt(i);
+        hash |= 0;
+      }
+      const hue = Math.abs(hash) % 360;
+      const bg = `hsl(${hue}, 82%, 88%)`;
+      const metaBg = `hsl(${hue}, 90%, 82%)`;
+      return `--location-bg:${bg};--location-meta-bg:${metaBg};background:${bg};`;
+    }
+
     function isRecentlyUpdated(ts){
       return ts && (Date.now() - Number(ts)) < 1000 * 60 * 30;
     }
@@ -614,6 +701,7 @@
 
     function applyPageUI(){
       pageTabs.forEach(btn => btn.classList.toggle("active", btn.dataset.page === currentPage));
+      document.body.dataset.page = currentPage;
       pageName.textContent = currentPage;
       document.title = `KNS ${currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
     }
@@ -735,12 +823,18 @@
 
     function locationCell(row, span=1, count=1){
       const meta = locationMetaFor(row);
-      const locationValue = meta.location ?? row.location ?? "";
+      const locationValue = getDisplayLocation(row);
       const updatedAt = meta.updatedAt || row.locationUpdatedAt;
       const recently = isRecentlyUpdated(updatedAt);
       const note = updatedAt ? `แก้ไขล่าสุด ${formatUpdateTime(updatedAt)}` : "ยังไม่มีประวัติแก้ไข Location";
       const merged = count > 1 ? `<span class="location-merged-note">รวม ${count} แถว Tank เดียวกัน</span>` : "";
-      return `<td class="location-cell ${recently ? 'location-updated' : ''}" rowspan="${span}">
+      const isExport = String(locationValue).includes('ส่งออก');
+      const classes = [
+        'location-cell',
+        recently ? 'location-updated' : '',
+        isExport ? 'location-export' : ''
+      ].filter(Boolean).join(' ');
+      return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
         <input data-id="${row.id}" data-field="location" value="${escapeAttr(locationValue)}" title="${escapeAttr(note)}" />
         <div class="location-meta">${escapeHtml(note)} ${merged}</div>
       </td>`;
@@ -783,7 +877,12 @@
         const isGroupStart = index === 0 || String(prev?.tripNo ?? "") !== String(row.tripNo ?? "");
         const tripNum = num(row.tripNo);
         const spanInfo = locationSpans.get(row.id) || { show:true, span:1, count:1 };
-        const classes = [tripNum % 2 === 0 ? "trip-alt" : "", isGroupStart ? "group-start" : ""].filter(Boolean).join(" ");
+        const isExportRow = hasExportLocation(row);
+        const classes = [
+          tripNum % 2 === 0 ? "trip-alt" : "",
+          isGroupStart ? "group-start" : "",
+          isExportRow ? "export-row" : ""
+        ].filter(Boolean).join(" ");
         return `
         <tr class="${classes}">
           <td class="${isGroupStart ? "" : "visual-blank"}">${isGroupStart ? inputCell(row,"tripNo","number") : `<input data-id="${row.id}" data-field="tripNo" type="number" value="${escapeAttr(row.tripNo ?? "")}" />`}</td>
