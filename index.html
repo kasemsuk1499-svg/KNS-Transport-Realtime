@@ -435,7 +435,188 @@
       justify-content:flex-end;
       border-top:1px solid var(--line);
     }
+
+    .todo-widget{
+      position:fixed;
+      left:12px;
+      top:96px;
+      z-index:30;
+      width:320px;
+      max-width:calc(100vw - 24px);
+      background:rgba(255,255,255,.96);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 12px 34px rgba(20,40,60,.18);
+      overflow:hidden;
+      backdrop-filter:blur(10px);
+    }
+    .todo-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:10px 12px;
+      background:#eef8fc;
+      border-bottom:1px solid var(--line);
+    }
+    .todo-title{
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      white-space:nowrap;
+    }
+    .todo-count{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:32px;
+      height:22px;
+      padding:0 7px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+    }
+    .todo-toggle{
+      min-height:28px;
+      padding:4px 8px;
+      border-radius:8px;
+      box-shadow:none;
+      background:#475467;
+      color:#fff;
+      font-size:12px;
+    }
+    .todo-body{
+      padding:10px;
+      max-height:calc(100vh - 135px);
+      overflow:auto;
+    }
+    .todo-add{
+      display:grid;
+      grid-template-columns:1fr 108px auto;
+      gap:6px;
+      margin-bottom:10px;
+    }
+    .todo-add input,
+    .todo-add select{
+      min-height:32px;
+      font-size:12px;
+      padding:6px 7px;
+      border-radius:8px;
+    }
+    .todo-add button{
+      min-height:32px;
+      padding:5px 8px;
+      border-radius:8px;
+      font-size:12px;
+      box-shadow:none;
+      white-space:nowrap;
+    }
+    .todo-section{
+      border:1px solid var(--line);
+      border-radius:12px;
+      overflow:hidden;
+      margin-top:8px;
+      background:#fff;
+    }
+    .todo-section-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:7px 9px;
+      font-weight:900;
+      font-size:13px;
+      background:#f6f9fb;
+      border-bottom:1px solid var(--line);
+    }
+    .todo-section-title .badge{
+      min-width:24px;
+      text-align:center;
+      border-radius:999px;
+      padding:1px 6px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:var(--muted);
+      font-size:11px;
+    }
+    .todo-section[data-cat="ด่วน!!"] .todo-section-title{
+      background:#fff1f0;
+      color:#b42318;
+    }
+    .todo-section[data-cat="เตรียมไว้ตอนเย็น"] .todo-section-title{
+      background:#f5f0ff;
+      color:#5b2db5;
+    }
+    .todo-list{
+      display:flex;
+      flex-direction:column;
+      gap:0;
+    }
+    .todo-item{
+      display:grid;
+      grid-template-columns:24px 1fr auto;
+      gap:6px;
+      align-items:start;
+      padding:8px 8px;
+      border-bottom:1px solid #eef2f4;
+    }
+    .todo-item:last-child{border-bottom:0}
+    .todo-item input[type="checkbox"]{
+      width:18px;
+      height:18px;
+      min-height:18px;
+      margin:2px 0 0;
+      accent-color:var(--ok);
+    }
+    .todo-text{
+      text-align:left;
+      line-height:1.35;
+      font-size:13px;
+      word-break:break-word;
+    }
+    .todo-item.done .todo-text{
+      color:#98a2b3;
+      text-decoration:line-through;
+    }
+    .todo-actions{
+      display:flex;
+      gap:4px;
+    }
+    .todo-actions button{
+      min-height:24px;
+      padding:3px 6px;
+      border-radius:7px;
+      box-shadow:none;
+      font-size:11px;
+      white-space:nowrap;
+    }
+    .todo-actions .todo-edit{background:#667085;color:#fff}
+    .todo-actions .todo-del{background:#d92d20;color:#fff}
+    .todo-empty{
+      padding:8px;
+      color:var(--muted);
+      font-size:12px;
+      text-align:center;
+    }
+    .todo-widget.collapsed .todo-body{display:none}
+    body[data-page="PTR"] .todo-widget{
+      background:rgba(251,255,252,.96);
+      border-color:var(--ptr-line);
+      box-shadow:0 12px 34px rgba(45,120,70,.16);
+    }
+    body[data-page="PTR"] .todo-head{background:#f0faf3;border-bottom-color:var(--ptr-line)}
+    body[data-page="PTR"] .todo-section{border-color:var(--ptr-line)}
+    body[data-page="PTR"] .todo-toggle{background:#6f8f78;color:#fff}
+    body[data-page="PTR"] .todo-actions .todo-edit{background:#6f8f78;color:#fff}
+
     @media (max-width:760px){
+      .todo-widget{position:relative;top:auto;left:auto;width:auto;margin:12px 0;z-index:1}
+      .todo-body{max-height:none}
+      .todo-add{grid-template-columns:1fr}
       header{position:relative}
       h1{text-align:left;font-size:18px}
       .status{grid-template-columns:repeat(2,1fr)}
@@ -468,6 +649,25 @@
   </header>
 
   <main>
+
+    <aside class="todo-widget" id="todoWidget" aria-label="To Do List ประจำวัน">
+      <div class="todo-head">
+        <div class="todo-title">☑ To Do List <span class="todo-count" id="todoCount">0/0</span></div>
+        <button class="todo-toggle" id="todoToggleBtn" type="button">ย่อ</button>
+      </div>
+      <div class="todo-body">
+        <div class="todo-add">
+          <input id="todoTextInput" type="text" placeholder="เพิ่มงานใหม่..." />
+          <select id="todoCategoryInput">
+            <option value="ระหว่างวัน">ระหว่างวัน</option>
+            <option value="เตรียมไว้ตอนเย็น">เตรียมไว้ตอนเย็น</option>
+            <option value="ด่วน!!">ด่วน!!</option>
+          </select>
+          <button id="todoAddBtn" class="good" type="button">+ เพิ่ม</button>
+        </div>
+        <div id="todoLists"></div>
+      </div>
+    </aside>
     <section class="status">
       <div class="stat"><span>จำนวนเที่ยวรถ</span><b id="totalTrips">0</b></div>
       <div class="stat"><span>จำนวนถุงรวม</span><b id="totalBags">0</b></div>
@@ -585,6 +785,13 @@
     const pageTabs = Array.from(document.querySelectorAll(".page-tab"));
     const syncDot = $("syncDot");
     const syncText = $("syncText");
+    const todoWidget = $("todoWidget");
+    const todoLists = $("todoLists");
+    const todoTextInput = $("todoTextInput");
+    const todoCategoryInput = $("todoCategoryInput");
+    const todoAddBtn = $("todoAddBtn");
+    const todoToggleBtn = $("todoToggleBtn");
+    const todoCount = $("todoCount");
 
     let currentDate = "";
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
@@ -597,10 +804,138 @@
     let saveTimers = new Map();
     let locationSyncTimer = null;
 
+    const TODO_CATEGORIES = ["ระหว่างวัน", "เตรียมไว้ตอนเย็น", "ด่วน!!"];
+    const DEFAULT_TODOS = [
+      { text:"เช็กจำนวนพาเลทส่งแจ้งเซลล์", category:"ระหว่างวัน" },
+      { text:"ทำแผนปริ้นให้หน้างานและโฟล์กลิฟ", category:"ระหว่างวัน" },
+      { text:"แจ้งแผนลงในไลน์กลุ่มรับเข้า", category:"ระหว่างวัน" },
+      { text:"ทำหัวรับเข้า", category:"ระหว่างวัน" },
+      { text:"ตัดพาเลทหรืองานคืนเมื่อวาน", category:"ระหว่างวัน" },
+      { text:"เช็คและเตรียมพาเลทคืนSTP", category:"ระหว่างวัน" },
+      { text:"เขียนมือแยกตั๋ว", category:"ระหว่างวัน" },
+      { text:"รับงานเข้าระบบและส่งรีพอทเรียบร้อย", category:"ระหว่างวัน" },
+      { text:"เช็กเมลก่อนกลับบ้านว่ามีขอแป้งคืนหรือแผนแซมไหม", category:"เตรียมไว้ตอนเย็น" }
+    ];
+    let todoItems = [];
+
     const fields = [
       "tripNo","productName","batchNo","tankCode",
       "bags","kg","pallets","packType","remark","location"
     ];
+
+
+    function todoStorageKey(){
+      return `knsTransportTodo/${currentPage}/${currentDate}`;
+    }
+
+    function makeTodoId(){
+      return `todo_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    }
+
+    function normalizeTodoCategory(category){
+      return TODO_CATEGORIES.includes(category) ? category : "ระหว่างวัน";
+    }
+
+    function defaultTodoItems(){
+      return DEFAULT_TODOS.map((item, index) => ({
+        id:`default_${index + 1}`,
+        text:item.text,
+        category:normalizeTodoCategory(item.category),
+        done:false,
+        fixed:true,
+        createdAt:index + 1
+      }));
+    }
+
+    function loadTodos(){
+      const key = todoStorageKey();
+      let saved = null;
+      try{ saved = JSON.parse(localStorage.getItem(key) || "null"); }catch(_){ saved = null; }
+      if(Array.isArray(saved)){
+        const byId = new Map(saved.map(item => [item.id, item]));
+        const mergedDefaults = defaultTodoItems().map(item => ({ ...item, ...(byId.get(item.id) || {}) }));
+        const customItems = saved.filter(item => item && !String(item.id || '').startsWith('default_'));
+        todoItems = [...mergedDefaults, ...customItems].map(item => ({
+          id:item.id || makeTodoId(),
+          text:String(item.text || '').trim() || 'งานใหม่',
+          category:normalizeTodoCategory(item.category),
+          done:!!item.done,
+          fixed:!!item.fixed,
+          createdAt:item.createdAt || Date.now()
+        }));
+      }else{
+        todoItems = defaultTodoItems();
+      }
+      renderTodos();
+    }
+
+    function saveTodos(){
+      localStorage.setItem(todoStorageKey(), JSON.stringify(todoItems));
+      renderTodos();
+    }
+
+    function renderTodos(){
+      if(!todoLists) return;
+      const done = todoItems.filter(item => item.done).length;
+      todoCount.textContent = `${done}/${todoItems.length}`;
+      todoLists.innerHTML = TODO_CATEGORIES.map(category => {
+        const items = todoItems.filter(item => item.category === category);
+        const remain = items.filter(item => !item.done).length;
+        const body = items.length ? items.map(item => `
+          <div class="todo-item ${item.done ? 'done' : ''}" data-todo-id="${escapeAttr(item.id)}">
+            <input type="checkbox" data-todo-action="toggle" ${item.done ? 'checked' : ''} aria-label="ทำเสร็จแล้ว" />
+            <div class="todo-text">${escapeHtml(item.text)}</div>
+            <div class="todo-actions">
+              <button type="button" class="todo-edit" data-todo-action="edit">แก้</button>
+              <button type="button" class="todo-del" data-todo-action="delete">ลบ</button>
+            </div>
+          </div>
+        `).join('') : `<div class="todo-empty">ยังไม่มีรายการในหมวดนี้</div>`;
+        return `
+          <section class="todo-section" data-cat="${escapeAttr(category)}">
+            <div class="todo-section-title"><span>${escapeHtml(category)}</span><span class="badge">${remain}</span></div>
+            <div class="todo-list">${body}</div>
+          </section>
+        `;
+      }).join('');
+    }
+
+    function addTodo(){
+      const text = String(todoTextInput.value || '').trim();
+      if(!text){ todoTextInput.focus(); return; }
+      todoItems.push({
+        id:makeTodoId(),
+        text,
+        category:normalizeTodoCategory(todoCategoryInput.value),
+        done:false,
+        fixed:false,
+        createdAt:Date.now()
+      });
+      todoTextInput.value = '';
+      saveTodos();
+      todoTextInput.focus();
+    }
+
+    function editTodo(id){
+      const item = todoItems.find(x => x.id === id);
+      if(!item) return;
+      const nextText = prompt('แก้ไขรายการ To Do', item.text);
+      if(nextText === null) return;
+      const cleanText = String(nextText || '').trim();
+      if(!cleanText) return;
+      const nextCategory = prompt('ใส่หมวด: ระหว่างวัน / เตรียมไว้ตอนเย็น / ด่วน!!', item.category);
+      item.text = cleanText;
+      item.category = normalizeTodoCategory(String(nextCategory || item.category).trim());
+      saveTodos();
+    }
+
+    function deleteTodo(id){
+      const item = todoItems.find(x => x.id === id);
+      if(!item) return;
+      if(!confirm(`ต้องการลบรายการนี้ใช่ไหม?\n${item.text}`)) return;
+      todoItems = todoItems.filter(x => x.id !== id);
+      saveTodos();
+    }
 
     function todayLocal(){
       const d = new Date();
@@ -862,6 +1197,7 @@
     function listenDate(date){
       currentDate = date;
       applyPageUI();
+      loadTodos();
       if(unsubscribe) unsubscribe();
       if(tankLocationUnsubscribe) tankLocationUnsubscribe();
       if(productOptionsUnsubscribe) productOptionsUnsubscribe();
@@ -1651,6 +1987,36 @@
       if(btn.dataset.action === "del") deleteRow(btn.dataset.id);
     });
 
+
+    todoAddBtn.addEventListener("click", addTodo);
+    todoTextInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        addTodo();
+      }
+    });
+    todoToggleBtn.addEventListener("click", () => {
+      todoWidget.classList.toggle("collapsed");
+      const collapsed = todoWidget.classList.contains("collapsed");
+      todoToggleBtn.textContent = collapsed ? "ขยาย" : "ย่อ";
+      localStorage.setItem("knsTransportTodoCollapsed", collapsed ? "1" : "0");
+    });
+    todoLists.addEventListener("click", (e) => {
+      const actionEl = e.target.closest("[data-todo-action]");
+      const row = e.target.closest("[data-todo-id]");
+      if(!actionEl || !row) return;
+      const id = row.dataset.todoId;
+      const item = todoItems.find(x => x.id === id);
+      if(!item) return;
+      const action = actionEl.dataset.todoAction;
+      if(action === "toggle"){
+        item.done = actionEl.checked;
+        saveTodos();
+      }
+      if(action === "edit") editTodo(id);
+      if(action === "delete") deleteTodo(id);
+    });
+
     $("addRowBtn").addEventListener("click", () => addRow());
     $("exportBtn").addEventListener("click", () => {
       downloadText(`KNS-${currentPage}-${currentDate}.csv`, toCSV(rowsCache));
@@ -1676,6 +2042,11 @@
     dateInput.addEventListener("change", () => {
       if(dateInput.value) listenDate(dateInput.value);
     });
+
+    if(localStorage.getItem("knsTransportTodoCollapsed") === "1"){
+      todoWidget.classList.add("collapsed");
+      todoToggleBtn.textContent = "ขยาย";
+    }
 
     dateInput.value = todayLocal();
     applyPageUI();
