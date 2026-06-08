@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KNS แผนขนย้ายสินค้าแบบเรียลไทม์</title>
+  <style>
+    :root{
+      --bg:#f4f7f9;
+      --card:#ffffff;
+      --line:#c9d4dc;
+      --head:#bfe8f3;
+      --head2:#dff7cf;
+      --accent:#ffe600;
+      --text:#10202a;
+      --muted:#60717c;
+      --danger:#d92d20;
+      --ok:#188038;
+      --blue:#0b72b9;
+      --purple:#7a3ee6;
+      --shadow:0 8px 22px rgba(20,40,60,.10);
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Tahoma, "Noto Sans Thai", Arial, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    header{
+      position:sticky;
+      top:0;
+      z-index:20;
+      background:rgba(255,255,255,.94);
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--line);
+      padding:12px 14px;
+    }
+    .topbar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      max-width:1500px;
+      margin:auto;
+    }
+    h1{
+      margin:0;
+      font-size:clamp(18px,2.4vw,28px);
+      line-height:1.25;
+      text-align:center;
+      flex:1 1 440px;
+    }
+    .controls{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    label{font-size:13px;color:var(--muted)}
+    input, select, textarea, button{
+      font-family:inherit;
+      font-size:14px;
+    }
+    input, select, textarea{
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:8px 9px;
+      background:#fff;
+      min-height:36px;
+    }
+    button{
+      border:0;
+      border-radius:10px;
+      padding:9px 12px;
+      cursor:pointer;
+      color:white;
+      background:var(--blue);
+      box-shadow:0 2px 8px rgba(0,0,0,.12);
+      min-height:36px;
+    }
+    button:hover{filter:brightness(.95)}
+    button.secondary{background:#475467}
+    button.good{background:var(--ok)}
+    button.danger{background:var(--danger)}
+    button.light{
+      background:#eef5f9;
+      color:var(--text);
+      border:1px solid var(--line);
+      box-shadow:none;
+    }
+    .page-tabs{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .page-tab{
+      min-width:86px;
+      background:#eef5f9;
+      color:var(--text);
+      border:1px solid var(--line);
+      box-shadow:none;
+      font-weight:700;
+    }
+    .page-tab.active{
+      color:#fff;
+      background:var(--blue);
+      border-color:var(--blue);
+    }
+    .page-tab[data-page="PTR"].active{
+      background:var(--purple);
+      border-color:var(--purple);
+    }
+    main{
+      max-width:1500px;
+      margin:16px auto 50px;
+      padding:0 12px;
+    }
+    .status{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(140px,1fr));
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .stat{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:12px;
+      box-shadow:var(--shadow);
+    }
+    .stat b{display:block;font-size:20px;margin-top:4px}
+    .panel{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .panel-head{
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .hint{color:var(--muted);font-size:13px}
+    .table-wrap{
+      width:100%;
+      overflow:auto;
+      max-height:calc(100vh - 230px);
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:1220px;
+      background:white;
+    }
+    th,td{
+      border:1px solid #222;
+      padding:0;
+      text-align:center;
+      vertical-align:middle;
+    }
+    th{
+      position:sticky;
+      top:0;
+      z-index:8;
+      background:var(--head);
+      font-size:13px;
+      padding:8px 6px;
+      white-space:nowrap;
+    }
+    th.location{background:var(--accent)}
+    tr.trip-alt td{background:#c8edf6}
+    tr.group-start td{border-top:2px solid #222}
+    td.visual-blank input{color:transparent; pointer-events:none}
+    td.visual-blank input:focus{color:var(--text); pointer-events:auto}
+    td input, td textarea{
+      width:100%;
+      border:0;
+      border-radius:0;
+      min-height:38px;
+      background:transparent;
+      text-align:center;
+      padding:6px;
+      outline:2px solid transparent;
+    }
+    td textarea{
+      resize:vertical;
+      min-height:38px;
+      text-align:left;
+      white-space:pre-wrap;
+    }
+    td input:focus, td textarea:focus{
+      outline:2px solid #2e90fa;
+      background:#fff;
+    }
+    .col-date{min-width:100px}
+    .col-trip{width:72px}
+    .col-product{min-width:230px}
+    .col-batch{min-width:150px}
+    .col-tank{min-width:150px}
+    .col-num{min-width:120px}
+    .col-remark{min-width:260px}
+    .col-location{min-width:150px}
+    .col-actions{min-width:118px}
+    .row-actions{
+      display:flex;
+      gap:5px;
+      justify-content:center;
+      padding:5px;
+    }
+    .row-actions button{
+      padding:5px 8px;
+      min-height:28px;
+      font-size:12px;
+      border-radius:8px;
+      box-shadow:none;
+    }
+    .location-cell{
+      position:relative;
+      min-width:170px;
+      background:#fffde8;
+    }
+    .location-cell input{
+      font-weight:700;
+      min-height:46px;
+      padding-bottom:18px;
+    }
+    .location-meta{
+      position:absolute;
+      left:5px;
+      right:5px;
+      bottom:2px;
+      font-size:10px;
+      color:#6b5b00;
+      line-height:1.15;
+      pointer-events:none;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .location-updated{
+      animation: locationPulse 1.4s ease-in-out infinite;
+      box-shadow: inset 0 0 0 3px #f79009;
+      background:#fff2cc !important;
+    }
+    .location-updated input{
+      background:#fff2cc !important;
+    }
+    .location-merged-note{
+      display:inline-block;
+      margin-top:2px;
+      padding:2px 6px;
+      border-radius:999px;
+      background:#fff0b3;
+      color:#7a4b00;
+      font-size:10px;
+      font-weight:700;
+    }
+    @keyframes locationPulse{
+      0%,100%{box-shadow: inset 0 0 0 3px #f79009;}
+      50%{box-shadow: inset 0 0 0 3px #fdb022, 0 0 16px rgba(247,144,9,.45);}
+    }
+    .dirty{
+      outline:2px solid #fdb022 !important;
+      background:#fff7dc !important;
+    }
+    .sync-dot{
+      display:inline-flex;
+      width:10px;height:10px;
+      border-radius:50%;
+      background:#aaa;
+      margin-right:6px;
+      vertical-align:middle;
+    }
+    .sync-dot.online{background:#12b76a}
+    .sync-dot.offline{background:#f04438}
+    dialog{
+      width:min(720px,95vw);
+      border:0;
+      border-radius:16px;
+      padding:0;
+      box-shadow:0 18px 60px rgba(0,0,0,.25);
+    }
+    dialog::backdrop{background:rgba(0,0,0,.35)}
+    .dialog-body{padding:16px}
+    .dialog-body textarea{width:100%;height:250px;text-align:left}
+    .dialog-head{
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      font-weight:700;
+    }
+    .dialog-foot{
+      padding:12px 16px;
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+      border-top:1px solid var(--line);
+    }
+    @media (max-width:760px){
+      header{position:relative}
+      h1{text-align:left;font-size:18px}
+      .status{grid-template-columns:repeat(2,1fr)}
+      .controls{width:100%}
+      .controls > *{flex:1 1 auto}
+      .table-wrap{max-height:none}
+      .hint{font-size:12px}
+      button{padding:9px 10px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>แผนการขนย้ายสินค้าไปคลังสินค้าด้านนอก (KNS)</h1>
+      <div class="controls">
+        <div class="page-tabs" aria-label="เลือกหน้า">
+          <button class="page-tab active" data-page="STP" type="button">STP</button>
+          <button class="page-tab" data-page="PTR" type="button">PTR</button>
+        </div>
+        <label>วันที่
+          <input type="date" id="dateInput" />
+        </label>
+        <button id="addRowBtn" class="good">+ เพิ่มแถว</button>
+        <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
+        <button id="importBtn" class="light">นำเข้า CSV</button>
+        <button id="exportBtn" class="light">ส่งออก CSV</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="status">
+      <div class="stat"><span>จำนวนเที่ยวรถ</span><b id="totalTrips">0</b></div>
+      <div class="stat"><span>จำนวนถุงรวม</span><b id="totalBags">0</b></div>
+      <div class="stat"><span>น้ำหนักรวม Kg</span><b id="totalKg">0.00</b></div>
+      <div class="stat"><span>จำนวนพาเลทรวม</span><b id="totalPallets">0</b></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <span id="syncDot" class="sync-dot"></span>
+          <b id="syncText">กำลังเชื่อมต่อ...</b>
+          <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — พิมพ์ให้เสร็จก่อน แล้วกด Enter เพื่อบันทึกและซิงก์เรียลไทม์</span>
+        </div>
+        <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • ช่องสีเหลืองอ่อน = ยังไม่บันทึก ต้องกด Enter</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-date">Date</th>
+              <th class="col-trip">No.</th>
+              <th class="col-product">Product name</th>
+              <th class="col-batch">Batch No.</th>
+              <th class="col-tank">Tank code</th>
+              <th class="col-num">Quantity (bag)</th>
+              <th class="col-num">Quantity (Kg)</th>
+              <th class="col-num">Quantity (pallet)</th>
+              <th class="col-remark">Remark</th>
+              <th class="col-location location">LOCATION</th>
+              <th class="col-actions">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="importDialog">
+    <div class="dialog-head">นำเข้าข้อมูล CSV</div>
+    <div class="dialog-body">
+      <p class="hint">
+        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้าให้อัตโนมัติ
+      </p>
+      <textarea id="csvInput" placeholder="ตัวอย่าง:
+1	STAB-A T0170	A26060723	A070725A4	960	24,000.00	16	Plastic pallet (60)
+	STAB-A T0170	A26060723	A070724A8	120	3,000.00	2	Plastic pallet (60)"></textarea>
+    </div>
+    <div class="dialog-foot">
+      <button id="cancelImportBtn" class="light">ยกเลิก</button>
+      <button id="confirmImportBtn" class="good">นำเข้า</button>
+    </div>
+  </dialog>
+
+  <script type="module">
+    /*
+      วิธีใช้ Firebase:
+      1) เข้า https://console.firebase.google.com แล้วสร้าง Project
+      2) สร้าง Realtime Database เลือกโซน asia-southeast1 หรือใกล้ที่สุด
+      3) ที่ Project settings > Web app คัดลอก firebaseConfig มาแทนค่าด้านล่าง
+      4) ตั้ง Rules ชั่วคราวให้ทุกคนแก้ได้:
+      {
+        "rules": {
+          "knsTransport": {
+            ".read": true,
+            ".write": true
+          }
+        }
+      }
+      หมายเหตุ: ถ้าใช้งานจริงในบริษัท ควรเพิ่ม Login และจำกัดสิทธิ์ภายหลัง
+    */
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getDatabase, ref, onValue, push, set, update, remove, serverTimestamp,
+      onDisconnect, get
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCr3wjsWr8Op2I8QovVe7fUppthhHfyVa0",
+      authDomain: "gacha-7a14f.firebaseapp.com",
+      databaseURL: "https://gacha-7a14f-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "gacha-7a14f",
+      storageBucket: "gacha-7a14f.firebasestorage.app",
+      messagingSenderId: "1014868346199",
+      appId: "1:1014868346199:web:cf9c02eddd9c99504daa12"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const $ = (id) => document.getElementById(id);
+    const dateInput = $("dateInput");
+    const tbody = $("tbody");
+    const pageName = $("pageName");
+    const pageTabs = Array.from(document.querySelectorAll(".page-tab"));
+    const syncDot = $("syncDot");
+    const syncText = $("syncText");
+
+    let currentDate = "";
+    let currentPage = localStorage.getItem("knsTransportPage") || "STP";
+    let unsubscribe = null;
+    let tankLocationUnsubscribe = null;
+    let rowsCache = [];
+    let tankLocationCache = {};
+    let saveTimers = new Map();
+    let locationSyncTimer = null;
+
+    const fields = [
+      "tripNo","productName","batchNo","tankCode",
+      "bags","kg","pallets","remark","location"
+    ];
+
+    function todayLocal(){
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0,10);
+    }
+
+    function formatDateThaiLike(iso){
+      if(!iso) return "";
+      const [y,m,d] = iso.split("-");
+      return `${Number(d)}/${Number(m)}/${y}`;
+    }
+
+    function num(v){
+      const n = Number(String(v ?? "").replace(/,/g,""));
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function fmt(n, digit=0){
+      return Number(n || 0).toLocaleString("en-US", {
+        minimumFractionDigits: digit,
+        maximumFractionDigits: digit
+      });
+    }
+
+    function pageRoot(page=currentPage){
+      return `knsTransport/pages/${page}`;
+    }
+
+    function legacyDateRef(date){
+      // ข้อมูลเดิมก่อนแยกหน้า STP/PTR จะอยู่ path นี้ ใช้สำหรับ fallback หน้า STP เท่านั้น
+      return ref(db, `knsTransport/plans/${date}/rows`);
+    }
+
+    function dateRef(date, page=currentPage){
+      return ref(db, `${pageRoot(page)}/plans/${date}/rows`);
+    }
+
+    function rowRef(id){
+      return ref(db, `${pageRoot()}/plans/${currentDate}/rows/${id}`);
+    }
+
+    function rowsRootRef(date=currentDate){
+      return ref(db, `${pageRoot()}/plans/${date}/rows`);
+    }
+
+    function encodeTankKey(tankCode){
+      return encodeURIComponent(String(tankCode || '').trim()).replace(/\./g, '%2E');
+    }
+
+    function normalizedTank(tankCode){
+      return String(tankCode || '').trim().toUpperCase();
+    }
+
+    function tankLocationsRef(page=currentPage){
+      return ref(db, `${pageRoot(page)}/tankLocations`);
+    }
+
+    function tankLocationRef(tankCode){
+      return ref(db, `${pageRoot()}/tankLocations/${encodeTankKey(normalizedTank(tankCode))}`);
+    }
+
+    function formatUpdateTime(ts){
+      if(!ts) return '';
+      const d = new Date(ts);
+      if(Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString('th-TH', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit'
+      });
+    }
+
+    function isRecentlyUpdated(ts){
+      return ts && (Date.now() - Number(ts)) < 1000 * 60 * 30;
+    }
+
+    function setOnline(isOnline){
+      syncDot.className = `sync-dot ${isOnline ? "online":"offline"}`;
+      syncText.textContent = isOnline ? "ออนไลน์ / ซิงก์เรียลไทม์" : "ออฟไลน์ / รอเชื่อมต่อ";
+    }
+
+    function listenConnection(){
+      const connectedRef = ref(db, ".info/connected");
+      onValue(connectedRef, (snap) => {
+        setOnline(!!snap.val());
+      });
+      const userStatusRef = ref(db, `knsTransport/presence/${crypto.randomUUID()}`);
+      onValue(connectedRef, (snap) => {
+        if (snap.val() === true) {
+          set(userStatusRef, { online:true, at:serverTimestamp() });
+          onDisconnect(userStatusRef).remove();
+        }
+      });
+    }
+
+    function applyPageUI(){
+      pageTabs.forEach(btn => btn.classList.toggle("active", btn.dataset.page === currentPage));
+      pageName.textContent = currentPage;
+      document.title = `KNS ${currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
+    }
+
+    function sortRows(raw){
+      return Object.entries(raw || {}).map(([id, data]) => ({ id, ...data })).sort((a,b) => {
+        const ta = num(a.tripNo), tb = num(b.tripNo);
+        if(ta !== tb) return ta - tb;
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      });
+    }
+
+    function listenDate(date){
+      currentDate = date;
+      applyPageUI();
+      if(unsubscribe) unsubscribe();
+      if(tankLocationUnsubscribe) tankLocationUnsubscribe();
+      tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
+
+      tankLocationUnsubscribe = onValue(tankLocationsRef(), (snap) => {
+        tankLocationCache = snap.val() || {};
+        queueLocationSync();
+        renderRows();
+      });
+
+      unsubscribe = onValue(dateRef(date), (snap) => {
+        const raw = snap.val() || {};
+        rowsCache = sortRows(raw);
+
+        // เพื่อไม่ให้ข้อมูลเดิมหาย: ถ้าเปิด STP แล้ว path ใหม่ยังว่าง ให้แสดงข้อมูลเดิมจาก knsTransport/plans/... เป็น fallback
+        if(!rowsCache.length && currentPage === "STP"){
+          onValue(legacyDateRef(date), (legacySnap) => {
+            const legacyRaw = legacySnap.val() || {};
+            rowsCache = sortRows(legacyRaw);
+            queueLocationSync();
+            renderRows();
+            renderTotals();
+          }, { onlyOnce:true });
+          return;
+        }
+
+        queueLocationSync();
+        renderRows();
+        renderTotals();
+      });
+    }
+
+    function renderTotals(){
+      const uniqueTrips = new Set(rowsCache.map(r => String(r.tripNo || "").trim()).filter(Boolean));
+      const bags = rowsCache.reduce((s,r)=>s+num(r.bags),0);
+      const kg = rowsCache.reduce((s,r)=>s+num(r.kg),0);
+      const pallets = rowsCache.reduce((s,r)=>s+num(r.pallets),0);
+      $("totalTrips").textContent = fmt(uniqueTrips.size);
+      $("totalBags").textContent = fmt(bags);
+      $("totalKg").textContent = fmt(kg,2);
+      $("totalPallets").textContent = fmt(pallets);
+    }
+
+    function inputCell(row, field, type="text"){
+      const value = row[field] ?? "";
+      if(field === "remark"){
+        return `<textarea data-id="${row.id}" data-field="${field}">${escapeHtml(value)}</textarea>`;
+      }
+      return `<input data-id="${row.id}" data-field="${field}" type="${type}" value="${escapeAttr(value)}" />`;
+    }
+
+    function locationMetaFor(row){
+      const key = encodeTankKey(normalizedTank(row.tankCode));
+      return tankLocationCache[key] || {};
+    }
+
+    function locationCell(row, span=1, count=1){
+      const meta = locationMetaFor(row);
+      const locationValue = meta.location ?? row.location ?? "";
+      const updatedAt = meta.updatedAt || row.locationUpdatedAt;
+      const recently = isRecentlyUpdated(updatedAt);
+      const note = updatedAt ? `แก้ไขล่าสุด ${formatUpdateTime(updatedAt)}` : "ยังไม่มีประวัติแก้ไข Location";
+      const merged = count > 1 ? `<span class="location-merged-note">รวม ${count} แถว Tank เดียวกัน</span>` : "";
+      return `<td class="location-cell ${recently ? 'location-updated' : ''}" rowspan="${span}">
+        <input data-id="${row.id}" data-field="location" value="${escapeAttr(locationValue)}" title="${escapeAttr(note)}" />
+        <div class="location-meta">${escapeHtml(note)} ${merged}</div>
+      </td>`;
+    }
+
+    function buildLocationSpans(rows){
+      const spans = new Map();
+      for(let i=0; i<rows.length; i++){
+        const tank = normalizedTank(rows[i].tankCode);
+        if(!tank){ spans.set(rows[i].id, { show:true, span:1, count:1 }); continue; }
+        let count = 1;
+        while(i + count < rows.length && normalizedTank(rows[i + count].tankCode) === tank){
+          count++;
+        }
+        spans.set(rows[i].id, { show:true, span:count, count });
+        for(let j=1; j<count; j++){
+          spans.set(rows[i + j].id, { show:false, span:0, count });
+        }
+        i += count - 1;
+      }
+      return spans;
+    }
+
+    function hasPendingEdit(){
+      return !!tbody.querySelector("input.dirty, textarea.dirty");
+    }
+
+    function renderRows(){
+      // ถ้าผู้ใช้กำลังพิมพ์อยู่ ยังไม่ให้ realtime render มาทับข้อความที่ยังไม่ได้กด Enter
+      if(hasPendingEdit() && tbody.contains(document.activeElement)){
+        return;
+      }
+      if(!rowsCache.length){
+        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มแถว” เพื่อเริ่มใส่แผนขนย้าย</td></tr>`;
+        return;
+      }
+      const locationSpans = buildLocationSpans(rowsCache);
+      tbody.innerHTML = rowsCache.map((row, index) => {
+        const prev = rowsCache[index - 1];
+        const isFirstDate = index === 0;
+        const isGroupStart = index === 0 || String(prev?.tripNo ?? "") !== String(row.tripNo ?? "");
+        const tripNum = num(row.tripNo);
+        const spanInfo = locationSpans.get(row.id) || { show:true, span:1, count:1 };
+        const classes = [tripNum % 2 === 0 ? "trip-alt" : "", isGroupStart ? "group-start" : ""].filter(Boolean).join(" ");
+        return `
+        <tr class="${classes}">
+          <td class="${isFirstDate ? "" : "visual-blank"}"><input data-id="${row.id}" data-field="dateText" value="${escapeAttr(isFirstDate ? (row.dateText || formatDateThaiLike(currentDate)) : "")}" /></td>
+          <td class="${isGroupStart ? "" : "visual-blank"}">${isGroupStart ? inputCell(row,"tripNo","number") : `<input data-id="${row.id}" data-field="tripNo" type="number" value="${escapeAttr(row.tripNo ?? "")}" />`}</td>
+          <td>${inputCell(row,"productName")}</td>
+          <td>${inputCell(row,"batchNo")}</td>
+          <td>${inputCell(row,"tankCode")}</td>
+          <td>${inputCell(row,"bags","number")}</td>
+          <td>${inputCell(row,"kg","number")}</td>
+          <td>${inputCell(row,"pallets","number")}</td>
+          <td>${inputCell(row,"remark")}</td>
+          ${spanInfo.show ? locationCell(row, spanInfo.span, spanInfo.count) : ""}
+          <td>
+            <div class="row-actions">
+              <button class="light" data-action="dup" data-id="${row.id}" title="คัดลอกแถว">คัดลอก</button>
+              <button class="danger" data-action="del" data-id="${row.id}" title="ลบแถว">ลบ</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+
+    function escapeHtml(v){
+      return String(v ?? "").replace(/[&<>"']/g, m => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+    function escapeAttr(v){ return escapeHtml(v).replace(/\n/g, " "); }
+
+    function queueLocationSync(){
+      clearTimeout(locationSyncTimer);
+      locationSyncTimer = setTimeout(syncRowsWithTankLocations, 250);
+    }
+
+    async function syncRowsWithTankLocations(){
+      if(!rowsCache.length) return;
+      const updates = {};
+      let changed = false;
+      for(const row of rowsCache){
+        const tank = normalizedTank(row.tankCode);
+        if(!tank) continue;
+        const meta = tankLocationCache[encodeTankKey(tank)];
+        if(!meta || meta.location === undefined) continue;
+        if(String(row.location ?? '') !== String(meta.location ?? '')){
+          updates[`${row.id}/location`] = meta.location ?? '';
+          updates[`${row.id}/locationUpdatedAt`] = meta.updatedAt || serverTimestamp();
+          updates[`${row.id}/locationSyncedAt`] = serverTimestamp();
+          changed = true;
+        }
+      }
+      if(changed){
+        await update(rowsRootRef(), updates);
+      }
+    }
+
+    async function getKnownLocation(tankCode){
+      const tank = normalizedTank(tankCode);
+      if(!tank) return null;
+      const local = tankLocationCache[encodeTankKey(tank)];
+      if(local && local.location !== undefined) return local;
+      const snap = await get(tankLocationRef(tank));
+      return snap.val();
+    }
+
+    async function saveLocationForTank(rowId, locationValue){
+      const row = rowsCache.find(r => r.id === rowId);
+      const tank = normalizedTank(row?.tankCode);
+      if(!tank){
+        await update(rowRef(rowId), {
+          location: locationValue,
+          locationUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return;
+      }
+      const payload = {
+        tankCode: tank,
+        location: locationValue,
+        updatedAt: serverTimestamp(),
+        page: currentPage,
+        sourceDate: currentDate
+      };
+      await set(tankLocationRef(tank), payload);
+
+      const updates = {};
+      for(const r of rowsCache){
+        if(normalizedTank(r.tankCode) === tank){
+          updates[`${r.id}/location`] = locationValue;
+          updates[`${r.id}/locationUpdatedAt`] = serverTimestamp();
+          updates[`${r.id}/updatedAt`] = serverTimestamp();
+        }
+      }
+      if(!updates[`${rowId}/location`]){
+        updates[`${rowId}/location`] = locationValue;
+        updates[`${rowId}/locationUpdatedAt`] = serverTimestamp();
+        updates[`${rowId}/updatedAt`] = serverTimestamp();
+      }
+      await update(rowsRootRef(), updates);
+    }
+
+    async function applyLocationAfterTankChange(rowId, tankCode){
+      const tank = normalizedTank(tankCode);
+      if(!tank) return;
+      const known = await getKnownLocation(tank);
+      const row = rowsCache.find(r => r.id === rowId);
+      if(known && known.location !== undefined){
+        await update(rowRef(rowId), {
+          tankCode: tank,
+          location: known.location ?? '',
+          locationUpdatedAt: known.updatedAt || serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }else if(row?.location){
+        await set(tankLocationRef(tank), {
+          tankCode: tank,
+          location: row.location,
+          updatedAt: serverTimestamp(),
+          page: currentPage,
+          sourceDate: currentDate
+        });
+      }
+    }
+
+    async function addRow(prefill={}){
+      const nextTrip = rowsCache.length
+        ? Math.max(...rowsCache.map(r => num(r.tripNo))) + 1
+        : 1;
+      const tank = normalizedTank(prefill.tankCode ?? "");
+      const knownLocation = tank ? await getKnownLocation(tank) : null;
+      const newRef = push(dateRef(currentDate));
+      await set(newRef, {
+        dateText: formatDateThaiLike(currentDate),
+        tripNo: prefill.tripNo ?? nextTrip,
+        productName: prefill.productName ?? "",
+        batchNo: prefill.batchNo ?? "",
+        tankCode: tank || (prefill.tankCode ?? ""),
+        bags: prefill.bags ?? "",
+        kg: prefill.kg ?? "",
+        pallets: prefill.pallets ?? "",
+        remark: prefill.remark ?? "Plastic pallet (60)",
+        location: knownLocation?.location ?? prefill.location ?? "",
+        locationUpdatedAt: knownLocation?.updatedAt ?? null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    function markUnsaved(el){
+      el.classList.add("dirty");
+      el.title = "ยังไม่บันทึก: กด Enter เพื่อบันทึก";
+    }
+
+    async function commitSave(el){
+      const id = el.dataset.id;
+      const field = el.dataset.field;
+      if(!id || !field) return;
+
+      const key = `${id}:${field}`;
+      clearTimeout(saveTimers.get(key));
+
+      el.disabled = true;
+      try{
+        let value = el.value;
+        if(["tripNo","bags","kg","pallets"].includes(field)){
+          value = value === "" ? "" : Number(value);
+        }
+        if(field === "location"){
+          await saveLocationForTank(id, value);
+        }else{
+          const saveValue = field === "tankCode" ? normalizedTank(value) : value;
+          await update(rowRef(id), {
+            [field]: saveValue,
+            updatedAt: serverTimestamp()
+          });
+          if(field === "tankCode"){
+            await applyLocationAfterTankChange(id, saveValue);
+          }
+        }
+        el.classList.remove("dirty");
+        el.title = "บันทึกแล้ว";
+        renderRows();
+        renderTotals();
+      }catch(err){
+        console.error(err);
+        alert("บันทึกไม่สำเร็จ กรุณาลองกด Enter อีกครั้ง");
+      }finally{
+        el.disabled = false;
+        el.focus();
+      }
+    }
+
+    async function duplicateRow(id){
+      const row = rowsCache.find(r => r.id === id);
+      if(!row) return;
+      const { id:_, createdAt, updatedAt, ...data } = row;
+      await addRow({
+        ...data,
+        tripNo: rowsCache.length ? Math.max(...rowsCache.map(r => num(r.tripNo))) + 1 : 1
+      });
+    }
+
+    async function deleteRow(id){
+      if(confirm("ต้องการลบแถวนี้ใช่ไหม?")){
+        await remove(rowRef(id));
+      }
+    }
+
+    function toCSV(rows){
+      const head = ["Page","Date","No","Product name","Batch No","Tank code","Quantity bag","Quantity Kg","Quantity pallet","Remark","Location"];
+      const lines = rows.map(r => [
+        currentPage,
+        r.dateText || formatDateThaiLike(currentDate),
+        r.tripNo, r.productName, r.batchNo, r.tankCode,
+        r.bags, r.kg, r.pallets, r.remark, (locationMetaFor(r).location ?? r.location)
+      ].map(csvCell).join(","));
+      return [head.join(","), ...lines].join("\n");
+    }
+
+    function csvCell(v){
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+    }
+
+    function downloadText(filename, text){
+      const blob = new Blob([text], {type:"text/csv;charset=utf-8"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function parseCSVLine(line){
+      const out = [];
+      let cur = "", quote = false;
+      for(let i=0;i<line.length;i++){
+        const ch = line[i];
+        if(ch === '"' && line[i+1] === '"'){ cur += '"'; i++; continue; }
+        if(ch === '"'){ quote = !quote; continue; }
+        if(ch === "," && !quote){ out.push(cur); cur=""; continue; }
+        cur += ch;
+      }
+      out.push(cur);
+      return out.map(x => x.trim());
+    }
+
+    function cleanNumberText(v){
+      const s = String(v ?? "").replace(/,/g, "").trim();
+      if(s === "" || s === "-") return "";
+      const n = Number(s);
+      return Number.isFinite(n) ? n : s;
+    }
+
+    function rowFromCells(cells, carryTripNo=""){
+      let cols = cells.map(x => String(x ?? "").trim()).filter((x,i) => x || i === 0);
+      if(!cols.length) return null;
+      if(cols[0] === "-" || /^remark$/i.test(cols[0])) return null;
+      if(/^date$/i.test(cols[0]) || /^no\.?$/i.test(cols[0])) return null;
+
+      let tripNo = carryTripNo;
+      if(/^\d+$/.test(cols[0])){
+        tripNo = cols.shift();
+      }else if(/^[-–—]$/.test(cols[0])){
+        cols.shift();
+        if(/^\d+$/.test(cols[0])) tripNo = cols.shift();
+      }
+
+      if(cols.length < 7) return null;
+      return {
+        tripNo,
+        productName: cols[0] ?? "",
+        batchNo: cols[1] ?? "",
+        tankCode: cols[2] ?? "",
+        bags: cleanNumberText(cols[3]),
+        kg: cleanNumberText(cols[4]),
+        pallets: cleanNumberText(cols[5]),
+        remark: (cols.slice(6).join(" ") || "Plastic pallet (60)").replace(/\s+-\s*$/, "").trim(),
+        location: ""
+      };
+    }
+
+    function parseTransportText(text){
+      const raw = String(text ?? "").replace(/\u00a0/g, " ").trim();
+      if(!raw) return [];
+      const rows = [];
+      let carryTripNo = "";
+
+      // แบบคัดลอกจาก Excel / Google Sheets จะคั่นคอลัมน์ด้วย Tab และขึ้นบรรทัดใหม่เป็นรายแถว
+      const lines = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      const hasTabRows = lines.some(line => line.includes("\t"));
+      if(hasTabRows){
+        for(const line of lines){
+          const cells = line.split(/\t+/).map(x => x.trim());
+          const row = rowFromCells(cells, carryTripNo);
+          if(row){
+            carryTripNo = row.tripNo || carryTripNo;
+            if(!row.tripNo) row.tripNo = carryTripNo;
+            rows.push(row);
+          }
+        }
+        if(rows.length) return rows;
+      }
+
+      // CSV ปกติ: ใช้ได้เมื่อไม่มี comma เป็นตัวคั่นหลักพันในตัวเลข หรือมี quote ครอบไว้
+      if(lines.some(line => line.includes(",") && !/\d,\d{3}/.test(line))){
+        for(const line of lines){
+          const row = rowFromCells(parseCSVLine(line), carryTripNo);
+          if(row){
+            carryTripNo = row.tripNo || carryTripNo;
+            if(!row.tripNo) row.tripNo = carryTripNo;
+            rows.push(row);
+          }
+        }
+        if(rows.length) return rows;
+      }
+
+      // แบบข้อความยาวต่อกัน: จับจากรูปแบบ Product + Batch + Tank + จำนวน + Remark
+      const flat = raw
+        .replace(/[\t\r\n]+/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/\bDate\b|\bNo\.?\b|Product name|Batch No\.?|Tank code|Quantity \(bag\)|Quantity \(Kg\)|Quantity \(pallet\)|Remark/gi, " ")
+        .trim();
+      const pattern = /(?:^|\s)([-–—]?\s*)?(?:(\d+)\s+)?(.+?)\s+([A-Z]\d{8})\s+([A-Z]\d{6}[A-Z]\d+)\s+([\d,]+)\s+([\d,]+(?:\.\d+)?)\s+(\d+)\s+(.*?)(?=\s+[-–—]?\s*(?:(?:\d+)\s+)?[^\s].+?\s+[A-Z]\d{8}\s+[A-Z]\d{6}[A-Z]\d+\s+[\d,]+\s+[\d,]+(?:\.\d+)?\s+\d+\s+|$)/g;
+      let match;
+      while((match = pattern.exec(flat))){
+        const [, dash, no, productName, batchNo, tankCode, bags, kg, pallets, remarkRaw] = match;
+        if(no) carryTripNo = no;
+        const remark = String(remarkRaw || "").replace(/\s+-\s*$/, "").trim();
+        rows.push({
+          tripNo: no || carryTripNo,
+          productName: productName.replace(/^[-–—]\s*/, "").trim(),
+          batchNo,
+          tankCode,
+          bags: cleanNumberText(bags),
+          kg: cleanNumberText(kg),
+          pallets: cleanNumberText(pallets),
+          remark: remark || "Plastic pallet (60)",
+          location: ""
+        });
+      }
+      return rows;
+    }
+
+    async function importCSV(text){
+      const rows = parseTransportText(text);
+      if(!rows.length){
+        alert("อ่านข้อมูลนำเข้าไม่ได้ กรุณาวางจาก Excel แบบคั่นด้วย Tab หรือเรียงเป็น No, Product, Batch, Tank, Bag, Kg, Pallet, Remark");
+        return;
+      }
+      for(const row of rows){
+        await addRow(row);
+      }
+    }
+
+    async function copyYesterday(){
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - 1);
+      const y = d.toISOString().slice(0,10);
+      const oldRows = await new Promise(resolve => {
+        onValue(dateRef(y), snap => {
+          const raw = snap.val() || {};
+          resolve(Object.values(raw));
+        }, { onlyOnce:true });
+      });
+      if(!oldRows.length){
+        alert("ไม่พบข้อมูลของวันก่อนหน้า");
+        return;
+      }
+      if(!confirm(`ต้องการคัดลอกข้อมูลจาก ${y} มาไว้วันที่ ${currentDate} ใช่ไหม?`)) return;
+      for(const row of oldRows){
+        const { createdAt, updatedAt, dateText, ...data } = row;
+        await addRow({ ...data, dateText: formatDateThaiLike(currentDate) });
+      }
+    }
+
+    tbody.addEventListener("input", (e) => {
+      const el = e.target.closest("input, textarea");
+      if(el?.dataset?.id) markUnsaved(el);
+    });
+
+    tbody.addEventListener("keydown", (e) => {
+      const el = e.target.closest("input, textarea");
+      if(!el?.dataset?.id || e.isComposing) return;
+      if(e.key === "Enter"){
+        // ช่อง Remark เป็น textarea: กด Enter = บันทึก, กด Shift+Enter = ขึ้นบรรทัดใหม่
+        if(el.tagName === "TEXTAREA" && e.shiftKey) return;
+        e.preventDefault();
+        commitSave(el);
+      }
+    });
+
+    tbody.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if(!btn) return;
+      if(btn.dataset.action === "dup") duplicateRow(btn.dataset.id);
+      if(btn.dataset.action === "del") deleteRow(btn.dataset.id);
+    });
+
+    $("addRowBtn").addEventListener("click", () => addRow());
+    $("exportBtn").addEventListener("click", () => {
+      downloadText(`KNS-${currentPage}-${currentDate}.csv`, toCSV(rowsCache));
+    });
+    $("copyYesterdayBtn").addEventListener("click", copyYesterday);
+
+    pageTabs.forEach(btn => {
+      btn.addEventListener("click", () => {
+        currentPage = btn.dataset.page;
+        localStorage.setItem("knsTransportPage", currentPage);
+        listenDate(dateInput.value);
+      });
+    });
+
+    $("importBtn").addEventListener("click", () => $("importDialog").showModal());
+    $("cancelImportBtn").addEventListener("click", () => $("importDialog").close());
+    $("confirmImportBtn").addEventListener("click", async () => {
+      await importCSV($("csvInput").value);
+      $("csvInput").value = "";
+      $("importDialog").close();
+    });
+
+    dateInput.addEventListener("change", () => {
+      if(dateInput.value) listenDate(dateInput.value);
+    });
+
+    dateInput.value = todayLocal();
+    applyPageUI();
+    listenConnection();
+    listenDate(dateInput.value);
+  </script>
+</body>
+</html>
