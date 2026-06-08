@@ -284,10 +284,59 @@
       background:#fffde8;
       transition:background-color .2s ease;
     }
-    .location-cell input{
+    .location-cell input,
+    .location-cell textarea{
       font-weight:700;
-      min-height:46px;
-      padding-bottom:18px;
+    }
+    .location-editor{
+      padding:4px;
+      min-width:230px;
+    }
+    .location-textarea{
+      display:block;
+      min-height:58px;
+      line-height:1.35;
+      text-align:left !important;
+      white-space:pre-wrap;
+      padding:7px 8px !important;
+      border:0;
+      border-radius:8px;
+      background:rgba(255,255,255,.35) !important;
+    }
+    .location-quick{
+      display:grid;
+      grid-template-columns:minmax(90px,1fr) 76px auto;
+      gap:4px;
+      margin-top:4px;
+      align-items:center;
+    }
+    .location-quick input{
+      min-height:28px;
+      height:28px;
+      padding:3px 6px;
+      border:1px solid rgba(0,0,0,.25);
+      border-radius:7px;
+      background:rgba(255,255,255,.78);
+      font-size:12px;
+      text-align:left;
+    }
+    .location-quick button{
+      min-height:28px;
+      padding:3px 7px;
+      border-radius:7px;
+      font-size:12px;
+      box-shadow:none;
+      white-space:nowrap;
+    }
+    .location-cell .location-meta{
+      position:static;
+      display:block;
+      margin-top:3px;
+      padding:0 2px;
+      white-space:normal;
+      overflow:visible;
+      text-overflow:clip;
+      text-align:left;
     }
     tr.export-row td{
       background:#fff3a3 !important;
@@ -458,6 +507,8 @@
           </tbody>
         </table>
         <datalist id="productList"></datalist>
+        <datalist id="locationPlaceList"></datalist>
+        <datalist id="locationCountList"></datalist>
       </div>
     </section>
   </main>
@@ -495,6 +546,18 @@
       }
       หมายเหตุ: ถ้าใช้งานจริงในบริษัท ควรเพิ่ม Login และจำกัดสิทธิ์ภายหลัง
     */
+
+    // ปิดระบบแจ้งเตือน/บล็อก Location แบบบังคับทั้งหมด
+    // ช่อง Location ต้องพิมพ์หมายเหตุได้อิสระ เช่น B39, เช็คแล้ว, รอโกดังใหม่ ฯลฯ
+    const originalAlert = window.alert.bind(window);
+    window.alert = (message) => {
+      const text = String(message ?? "");
+      if(text.includes("โลเคชั่นนี้ไม่มีในระบบ") || text.includes("ใช้ได้เฉพาะ")){
+        console.warn("Location validation popup suppressed:", text);
+        return;
+      }
+      originalAlert(message);
+    };
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -592,6 +655,37 @@
       return bags && factor ? bags * factor : "";
     }
 
+    const VALID_LOCATION_PLACES = (() => {
+      const out = [];
+      for(const side of ["1", "2"]){
+        for(const zone of ["A", "B", "C", "D"]){
+          for(let i = 1; i <= 60; i++){
+            out.push(`${side}${zone}${String(i).padStart(2, "0")}`);
+          }
+        }
+      }
+      out.push("ส่งออก", "โกดังใหม่");
+      return out;
+    })();
+    const VALID_LOCATION_SET = new Set(VALID_LOCATION_PLACES.map(x => x.toUpperCase()));
+
+    function normalizeLocationPlace(place){
+      const raw = String(place || '').trim();
+      if(!raw) return '';
+      const special = VALID_LOCATION_PLACES.find(x => x === raw);
+      if(special) return special;
+      const m = raw.toUpperCase().match(/^([12])\s*([ABCD])\s*-?\s*(\d{1,2})$/);
+      if(!m) return raw;
+      const n = Number(m[3]);
+      if(n < 1 || n > 60) return raw.toUpperCase();
+      return `${m[1]}${m[2]}${String(n).padStart(2, "0")}`;
+    }
+
+    // ใช้ดรอปดาวน์เป็น "ตัวช่วยเลือก" เท่านั้น ไม่ใช้บังคับตรวจโล
+    function isAllowedLocationPlace(place){
+      return true;
+    }
+
 
     function pageRoot(page=currentPage){
       return `knsTransport/pages/${page}`;
@@ -656,6 +750,49 @@
       const key = encodeTankKey(normalizedTank(row?.tankCode));
       const meta = tankLocationCache[key] || {};
       return String(meta.location ?? row?.location ?? '').trim();
+    }
+
+
+    function splitLocationParts(locationText){
+      const text = String(locationText || '').trim();
+      if(!text) return [];
+      return text
+        .split(/\n|\/|,|;|\|/g)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => {
+          const m = part.match(/^(.+?)(?:\s*(?:=|:|：)\s*|\s+)(\d+(?:\.\d+)?)\s*(?:เลท|pallet|plt|pl|พาเลท)?$/i);
+          if(m) return { place:normalizeLocationPlace(m[1]), count:m[2].trim() };
+          return { place:normalizeLocationPlace(part.replace(/\s*=\s*$/,'').trim()), count:'' };
+        })
+        .filter(item => item.place);
+    }
+
+    function normalizeLocationText(locationText){
+      const parts = splitLocationParts(locationText);
+      if(!parts.length) return String(locationText || '').trim();
+      if(parts.length === 1) return parts[0].place;
+      return parts.map(item => item.count ? `${item.place}=${item.count}เลท` : item.place).join('\n');
+    }
+
+    function formatLocationForEdit(locationText){
+      return String(locationText || '').trim();
+    }
+
+    function commonLocationPlaces(){
+      return VALID_LOCATION_PLACES;
+    }
+
+    function renderLocationDatalists(){
+      const placeList = $('locationPlaceList');
+      const countList = $('locationCountList');
+      if(placeList){
+        placeList.innerHTML = commonLocationPlaces().map(name => `<option value="${escapeAttr(name)}"></option>`).join('');
+      }
+      if(countList){
+        const counts = Array.from({length:60}, (_,i)=>String(i+1));
+        countList.innerHTML = counts.map(n => `<option value="${n}"></option>`).join('');
+      }
     }
 
     function hasExportLocation(row){
@@ -824,6 +961,7 @@
     function locationCell(row, span=1, count=1){
       const meta = locationMetaFor(row);
       const locationValue = getDisplayLocation(row);
+      const editValue = formatLocationForEdit(locationValue);
       const updatedAt = meta.updatedAt || row.locationUpdatedAt;
       const recently = isRecentlyUpdated(updatedAt);
       const note = updatedAt ? `แก้ไขล่าสุด ${formatUpdateTime(updatedAt)}` : "ยังไม่มีประวัติแก้ไข Location";
@@ -835,8 +973,15 @@
         isExport ? 'location-export' : ''
       ].filter(Boolean).join(' ');
       return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
-        <input data-id="${row.id}" data-field="location" value="${escapeAttr(locationValue)}" title="${escapeAttr(note)}" />
-        <div class="location-meta">${escapeHtml(note)} ${merged}</div>
+        <div class="location-editor">
+          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="เช่น 1A02=14เลท&#10;2D60=10เลท&#10;ส่งออก">${escapeHtml(editValue)}</textarea>
+          <div class="location-quick">
+            <input list="locationPlaceList" autocomplete="off" data-location-place="${row.id}" placeholder="เช่น 1A02" />
+            <input list="locationCountList" autocomplete="off" data-location-count="${row.id}" placeholder="เลท" />
+            <button type="button" data-action="add-location-part" data-id="${row.id}">+ เพิ่ม</button>
+          </div>
+          <div class="location-meta">${escapeHtml(note)} ${merged}</div>
+        </div>
       </td>`;
     }
 
@@ -906,6 +1051,7 @@
         </tr>`;
       }).join("");
       renderProductDatalist();
+      renderLocationDatalists();
     }
 
     function escapeHtml(v){
@@ -951,6 +1097,8 @@
     }
 
     async function saveLocationForTank(rowId, locationValue){
+      // เก็บข้อความ Location ตามที่พิมพ์ เพื่อรองรับหมายเหตุอิสระ
+      locationValue = String(locationValue || '').trim();
       const row = rowsCache.find(r => r.id === rowId);
       const tank = normalizedTank(row?.tankCode);
       if(!tank){
@@ -1132,6 +1280,7 @@
           value = normalizePackType(value);
         }
         if(field === "location"){
+          // ไม่บังคับตรวจว่าโลมีในระบบ เพื่อให้พิมพ์หมายเหตุเองได้อิสระ
           await saveLocationForTank(id, value);
         }else{
           const currentRow = rowsCache.find(r => r.id === id) || {};
@@ -1206,6 +1355,30 @@
       if(confirm("ต้องการลบแถวนี้ใช่ไหม?")){
         await remove(rowRef(id));
       }
+    }
+
+
+    function addLocationPart(id){
+      const placeInput = tbody.querySelector(`[data-location-place="${CSS.escape(id)}"]`);
+      const countInput = tbody.querySelector(`[data-location-count="${CSS.escape(id)}"]`);
+      const textEl = tbody.querySelector(`[data-id="${CSS.escape(id)}"][data-field="location"]`);
+      if(!placeInput || !textEl) return;
+      const place = String(placeInput.value || '').trim();
+      const count = String(countInput?.value || '').replace(/[^0-9.]/g,'').trim();
+      if(!place){
+        placeInput.focus();
+        return;
+      }
+      const normalizedPlace = normalizeLocationPlace(place);
+      const parts = splitLocationParts(textEl.value);
+      const nextParts = [...parts, {place: normalizedPlace || place, count}];
+      textEl.value = nextParts.length === 1
+        ? (normalizedPlace || place)
+        : nextParts.map(item => item.count ? `${item.place}=${item.count}เลท` : item.place).join('\n');
+      placeInput.value = '';
+      if(countInput) countInput.value = '';
+      markUnsaved(textEl);
+      commitSave(textEl, false);
     }
 
     function calcExportRemark(totalBags, totalKg, fallbackRemark=""){
@@ -1471,6 +1644,7 @@
     tbody.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
       if(!btn) return;
+      if(btn.dataset.action === "add-location-part") addLocationPart(btn.dataset.id);
       if(btn.dataset.action === "insert-item") insertItemAfter(btn.dataset.id);
       if(btn.dataset.action === "insert-trip") insertTripAfter(btn.dataset.id);
       if(btn.dataset.action === "dup") duplicateRow(btn.dataset.id);
