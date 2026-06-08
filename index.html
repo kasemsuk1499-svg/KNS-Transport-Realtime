@@ -1043,13 +1043,63 @@
       }
     }
 
+    function calcExportRemark(totalBags, totalKg, fallbackRemark=""){
+      const bags = num(totalBags);
+      const kg = num(totalKg);
+      if(!bags || !kg) return fallbackRemark || "";
+
+      // ใช้สูตร Kg ÷ Bag: 25 = PP, 850 = JB
+      // เผื่อทศนิยมเล็กน้อยจากการกรอกข้อมูล จึงใช้ tolerance
+      const kgPerBag = kg / bags;
+      if(Math.abs(kgPerBag - 25) < 0.0001) return "PP";
+      if(Math.abs(kgPerBag - 850) < 0.0001) return "JB";
+      return fallbackRemark || "";
+    }
+
     function toCSV(rows){
-      const head = ["Page","No","Product name","Batch No","Tank code","Quantity bag","Quantity Kg","Quantity pallet","Remark","Location"];
-      const lines = rows.map(r => [
-        currentPage,
-        r.tripNo, r.productName, r.batchNo, r.tankCode,
-        r.bags, r.kg, r.pallets, r.remark, (locationMetaFor(r).location ?? r.location)
-      ].map(csvCell).join(","));
+      const head = ["No","Product name","Quantity bag","Quantity Kg","Quantity pallet","Remark"];
+      const grouped = new Map();
+
+      for(const r of rows){
+        const tripNo = String(r.tripNo ?? "").trim();
+        const productName = String(r.productName ?? "").trim();
+        if(!tripNo && !productName) continue;
+
+        // แยกข้อมูลแต่ละ No โดยสิ้นเชิง และยุบเฉพาะ Product name ที่ซ้ำกันใน No เดียวกัน
+        const key = `${tripNo}||${productName}`;
+        if(!grouped.has(key)){
+          grouped.set(key, {
+            tripNo,
+            productName,
+            bags: 0,
+            kg: 0,
+            pallets: 0,
+            fallbackRemark: ""
+          });
+        }
+
+        const item = grouped.get(key);
+        item.bags += num(r.bags);
+        item.kg += num(r.kg);
+        item.pallets += num(r.pallets);
+        if(!item.fallbackRemark && r.remark) item.fallbackRemark = r.remark;
+      }
+
+      const lines = Array.from(grouped.values())
+        .sort((a,b) => {
+          const tripDiff = num(a.tripNo) - num(b.tripNo);
+          if(tripDiff) return tripDiff;
+          return a.productName.localeCompare(b.productName, 'th');
+        })
+        .map(item => [
+          `R${item.tripNo}`,
+          item.productName,
+          item.bags || "",
+          item.kg || "",
+          item.pallets || "",
+          calcExportRemark(item.bags, item.kg, item.fallbackRemark)
+        ].map(csvCell).join(","));
+
       return [head.join(","), ...lines].join("\n");
     }
 
@@ -1059,7 +1109,7 @@
     }
 
     function downloadText(filename, text){
-      const blob = new Blob([text], {type:"text/csv;charset=utf-8"});
+      const blob = new Blob(["\ufeff", text], {type:"text/csv;charset=utf-8"});
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = filename;
