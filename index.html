@@ -158,7 +158,7 @@
     table{
       width:100%;
       border-collapse:collapse;
-      min-width:1220px;
+      min-width:1320px;
       background:white;
     }
     th,td{
@@ -181,7 +181,7 @@
     tr.group-start td{border-top:2px solid #222}
     td.visual-blank input{color:transparent; pointer-events:none}
     td.visual-blank input:focus{color:var(--text); pointer-events:auto}
-    td input, td textarea{
+    td input, td textarea, td select{
       width:100%;
       border:0;
       border-radius:0;
@@ -197,7 +197,7 @@
       text-align:left;
       white-space:pre-wrap;
     }
-    td input:focus, td textarea:focus{
+    td input:focus, td textarea:focus, td select:focus{
       outline:2px solid #2e90fa;
       background:#fff;
     }
@@ -207,6 +207,7 @@
     .col-batch{min-width:150px}
     .col-tank{min-width:150px}
     .col-num{min-width:120px}
+    .col-pack{min-width:95px}
     .col-remark{min-width:260px}
     .col-location{min-width:150px}
     .col-actions{min-width:250px}
@@ -383,13 +384,14 @@
               <th class="col-num">Quantity (bag)</th>
               <th class="col-num">Quantity (Kg)</th>
               <th class="col-num">Quantity (pallet)</th>
+              <th class="col-pack">PP/JB</th>
               <th class="col-remark">Remark</th>
               <th class="col-location location">LOCATION</th>
               <th class="col-actions">จัดการ</th>
             </tr>
           </thead>
           <tbody id="tbody">
-            <tr><td colspan="10" style="padding:18px">กำลังโหลดข้อมูล...</td></tr>
+            <tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูล...</td></tr>
           </tbody>
         </table>
         <datalist id="productList"></datalist>
@@ -401,7 +403,7 @@
     <div class="dialog-head">นำเข้าข้อมูล CSV</div>
     <div class="dialog-body">
       <p class="hint">
-        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้าให้อัตโนมัติ
+        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้า และคำนวณ PP/JB จาก Quantity (Kg) ÷ Quantity (bag) ให้อัตโนมัติ
       </p>
       <textarea id="csvInput" placeholder="ตัวอย่าง:
 1	STAB-A T0170	A26060723	A070725A4	960	24,000.00	16	Plastic pallet (60)
@@ -471,7 +473,7 @@
 
     const fields = [
       "tripNo","productName","batchNo","tankCode",
-      "bags","kg","pallets","remark","location"
+      "bags","kg","pallets","packType","remark","location"
     ];
 
     function todayLocal(){
@@ -497,6 +499,36 @@
         maximumFractionDigits: digit
       });
     }
+
+    function calcPackType(bagsValue, kgValue){
+      const bags = num(bagsValue);
+      const kg = num(kgValue);
+      if(!bags || !kg) return "";
+      const kgPerBag = kg / bags;
+      if(Math.abs(kgPerBag - 25) < 0.0001) return "PP";
+      if(Math.abs(kgPerBag - 850) < 0.0001) return "JB";
+      return "";
+    }
+
+    function normalizePackType(v){
+      const s = String(v ?? "").trim().toUpperCase();
+      if(s === "PP" || s === "JB") return s;
+      return "";
+    }
+
+    function packFactor(packType){
+      const type = normalizePackType(packType);
+      if(type === "PP") return 25;
+      if(type === "JB") return 850;
+      return 0;
+    }
+
+    function kgFromBagsAndPackType(bagsValue, packType){
+      const bags = num(bagsValue);
+      const factor = packFactor(packType);
+      return bags && factor ? bags * factor : "";
+    }
+
 
     function pageRoot(page=currentPage){
       return `knsTransport/pages/${page}`;
@@ -608,7 +640,7 @@
       if(unsubscribe) unsubscribe();
       if(tankLocationUnsubscribe) tankLocationUnsubscribe();
       if(productOptionsUnsubscribe) productOptionsUnsubscribe();
-      tbody.innerHTML = `<tr><td colspan="10" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
 
       productOptionsUnsubscribe = onValue(productOptionsRef(), (snap) => {
         productOptionsCache = snap.val() || {};
@@ -658,6 +690,14 @@
       const value = row[field] ?? "";
       if(field === "remark"){
         return `<textarea data-id="${row.id}" data-field="${field}">${escapeHtml(value)}</textarea>`;
+      }
+      if(field === "packType"){
+        const type = normalizePackType(value);
+        return `<select data-id="${row.id}" data-field="${field}">
+          <option value="" ${type === "" ? "selected" : ""}>-</option>
+          <option value="PP" ${type === "PP" ? "selected" : ""}>PP</option>
+          <option value="JB" ${type === "JB" ? "selected" : ""}>JB</option>
+        </select>`;
       }
       if(field === "productName"){
         return `<input class="product-input" list="productList" autocomplete="off" placeholder="พิมพ์เพื่อค้นหา/เลือกสินค้า" data-id="${row.id}" data-field="${field}" type="text" value="${escapeAttr(value)}" />`;
@@ -725,7 +765,7 @@
     }
 
     function hasPendingEdit(){
-      return !!tbody.querySelector("input.dirty, textarea.dirty, input.saving, textarea.saving");
+      return !!tbody.querySelector("input.dirty, textarea.dirty, select.dirty, input.saving, textarea.saving, select.saving");
     }
 
     function renderRows(){
@@ -734,7 +774,7 @@
         return;
       }
       if(!rowsCache.length){
-        tbody.innerHTML = `<tr><td colspan="10" style="padding:18px">ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย</td></tr>`;
         return;
       }
       const locationSpans = buildLocationSpans(rowsCache);
@@ -753,6 +793,7 @@
           <td>${inputCell(row,"bags","number")}</td>
           <td>${inputCell(row,"kg","number")}</td>
           <td>${inputCell(row,"pallets","number")}</td>
+          <td>${inputCell(row,"packType")}</td>
           <td>${inputCell(row,"remark")}</td>
           ${spanInfo.show ? locationCell(row, spanInfo.span, spanInfo.count) : ""}
           <td>
@@ -897,6 +938,7 @@
         bags: prefill.bags ?? "",
         kg: prefill.kg ?? "",
         pallets: prefill.pallets ?? "",
+        packType: normalizePackType(prefill.packType) || calcPackType(prefill.bags, prefill.kg),
         remark: prefill.remark ?? "Plastic pallet (60)",
         location: knownLocation?.location ?? prefill.location ?? "",
         locationUpdatedAt: knownLocation?.updatedAt ?? null,
@@ -922,6 +964,7 @@
         bags: "",
         kg: "",
         pallets: "",
+        packType: "",
         remark: row.remark || "Plastic pallet (60)",
         location: ""
       }, { sortOrder: orderBetween(currentOrder, nextOrder) });
@@ -948,6 +991,7 @@
         bags: "",
         kg: "",
         pallets: "",
+        packType: "",
         remark: "Plastic pallet (60)",
         location: ""
       }, { sortOrder: nextDefaultSortOrder() });
@@ -985,14 +1029,36 @@
         if(["tripNo","bags","kg","pallets"].includes(field)){
           value = value === "" ? "" : Number(value);
         }
+        if(field === "packType"){
+          value = normalizePackType(value);
+        }
         if(field === "location"){
           await saveLocationForTank(id, value);
         }else{
+          const currentRow = rowsCache.find(r => r.id === id) || {};
           const saveValue = field === "tankCode" ? normalizedTank(value) : value;
-          await update(rowRef(id), {
+          const payload = {
             [field]: saveValue,
             updatedAt: serverTimestamp()
-          });
+          };
+
+          if(field === "bags"){
+            const type = normalizePackType(currentRow.packType);
+            const autoKg = kgFromBagsAndPackType(saveValue, type);
+            if(autoKg !== "") payload.kg = autoKg;
+          }
+
+          if(field === "kg"){
+            const type = calcPackType(currentRow.bags, saveValue);
+            if(type) payload.packType = type;
+          }
+
+          if(field === "packType"){
+            const autoKg = kgFromBagsAndPackType(currentRow.bags, saveValue);
+            if(autoKg !== "") payload.kg = autoKg;
+          }
+
+          await update(rowRef(id), payload);
           if(field === "tankCode"){
             await applyLocationAfterTankChange(id, saveValue);
           }
@@ -1057,7 +1123,7 @@
     }
 
     function toCSV(rows){
-      const head = ["No","Product name","Quantity bag","Quantity Kg","Quantity pallet","Remark"];
+      const head = ["No","Product name","Quantity bag","Quantity Kg","Quantity pallet","PP/JB","Remark"];
       const grouped = new Map();
 
       for(const r of rows){
@@ -1074,6 +1140,7 @@
             bags: 0,
             kg: 0,
             pallets: 0,
+            fallbackPackType: "",
             fallbackRemark: ""
           });
         }
@@ -1082,6 +1149,7 @@
         item.bags += num(r.bags);
         item.kg += num(r.kg);
         item.pallets += num(r.pallets);
+        if(!item.fallbackPackType && r.packType) item.fallbackPackType = normalizePackType(r.packType);
         if(!item.fallbackRemark && r.remark) item.fallbackRemark = r.remark;
       }
 
@@ -1097,7 +1165,8 @@
           item.bags || "",
           item.kg || "",
           item.pallets || "",
-          calcExportRemark(item.bags, item.kg, item.fallbackRemark)
+          calcPackType(item.bags, item.kg) || item.fallbackPackType || "",
+          item.fallbackRemark || ""
         ].map(csvCell).join(","));
 
       return [head.join(","), ...lines].join("\n");
@@ -1161,6 +1230,7 @@
         bags: cleanNumberText(cols[3]),
         kg: cleanNumberText(cols[4]),
         pallets: cleanNumberText(cols[5]),
+        packType: calcPackType(cleanNumberText(cols[3]), cleanNumberText(cols[4])),
         remark: (cols.slice(6).join(" ") || "Plastic pallet (60)").replace(/\s+-\s*$/, "").trim(),
         location: ""
       };
@@ -1221,6 +1291,7 @@
           bags: cleanNumberText(bags),
           kg: cleanNumberText(kg),
           pallets: cleanNumberText(pallets),
+          packType: calcPackType(cleanNumberText(bags), cleanNumberText(kg)),
           remark: remark || "Plastic pallet (60)",
           location: ""
         });
@@ -1262,12 +1333,20 @@
     }
 
     tbody.addEventListener("input", (e) => {
-      const el = e.target.closest("input, textarea");
+      const el = e.target.closest("input, textarea, select");
       if(el?.dataset?.id) markUnsaved(el);
     });
 
+    tbody.addEventListener("change", (e) => {
+      const el = e.target.closest("select");
+      if(el?.dataset?.id){
+        markUnsaved(el);
+        commitSave(el, false);
+      }
+    });
+
     tbody.addEventListener("keydown", (e) => {
-      const el = e.target.closest("input, textarea");
+      const el = e.target.closest("input, textarea, select");
       if(!el?.dataset?.id || e.isComposing) return;
       if(e.key === "Enter"){
         // ช่อง Remark เป็น textarea: กด Enter = บันทึก, กด Shift+Enter = ขึ้นบรรทัดใหม่
@@ -1282,7 +1361,7 @@
     });
 
     tbody.addEventListener("focusout", (e) => {
-      const el = e.target.closest("input, textarea");
+      const el = e.target.closest("input, textarea, select");
       if(!el?.dataset?.id || !el.classList.contains("dirty")) return;
       // Tab หรือคลิกออกจากช่อง = ถือว่าพิมพ์เสร็จแล้ว ให้บันทึกและซิงก์
       setTimeout(() => {
