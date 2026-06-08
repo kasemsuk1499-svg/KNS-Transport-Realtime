@@ -643,7 +643,7 @@
         <button id="addRowBtn" class="good">+ เพิ่มคันท้ายสุด</button>
         <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
         <button id="importBtn" class="light">นำเข้า CSV</button>
-        <button id="exportBtn" class="light">ส่งออก CSV</button>
+        <button id="exportBtn" class="light">ส่งออก Excel</button>
       </div>
     </div>
   </header>
@@ -1794,6 +1794,219 @@
       URL.revokeObjectURL(a.href);
     }
 
+
+    function excelXmlEscape(v){
+      return String(v ?? '').replace(/[&<>"']/g, m => ({
+        '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&apos;'
+      }[m]));
+    }
+
+    function excelNumber(v){
+      const n = num(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function thaiMonthYear(iso){
+      if(!iso) return '';
+      const months = [
+        'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+        'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+      ];
+      const [y,m] = iso.split('-').map(Number);
+      if(!y || !m) return '';
+      return `เดือน${months[m - 1]} ${y + 543}`;
+    }
+
+    function buildAdjacentSpans(rows, keyGetter){
+      const spans = new Map();
+      for(let i = 0; i < rows.length; i++){
+        const key = String(keyGetter(rows[i]) || '').trim();
+        if(!key){
+          spans.set(i, { show:true, span:1, groupIndex:i });
+          continue;
+        }
+        let count = 1;
+        while(i + count < rows.length && String(keyGetter(rows[i + count]) || '').trim() === key){
+          count++;
+        }
+        spans.set(i, { show:true, span:count, groupIndex:i });
+        for(let j = 1; j < count; j++){
+          spans.set(i + j, { show:false, span:0, groupIndex:i });
+        }
+        i += count - 1;
+      }
+      return spans;
+    }
+
+    function buildTankGroupStyles(rows){
+      const styles = [];
+      let groupIndex = -1;
+      let lastTank = null;
+      for(const row of rows){
+        const tank = normalizedTank(row.tankCode);
+        if(tank !== lastTank){
+          groupIndex++;
+          lastTank = tank;
+        }
+        if(hasExportLocation(row)){
+          styles.push('exportRow');
+        }else if(groupIndex % 2 === 0){
+          styles.push('bodyYellow');
+        }else{
+          styles.push('bodyBlue');
+        }
+      }
+      return styles;
+    }
+
+    function excelXmlCell({col, value='', style='body', type='String', mergeDown=0, mergeAcross=0}){
+      const attrs = [];
+      if(col) attrs.push(`ss:Index="${col}"`);
+      if(style) attrs.push(`ss:StyleID="${style}"`);
+      if(mergeDown > 0) attrs.push(`ss:MergeDown="${mergeDown}"`);
+      if(mergeAcross > 0) attrs.push(`ss:MergeAcross="${mergeAcross}"`);
+      let dataType = type;
+      let dataValue = value;
+      if(type === 'Number'){
+        dataValue = String(excelNumber(value));
+      }else{
+        dataType = 'String';
+        dataValue = excelXmlEscape(value);
+      }
+      return `<Cell ${attrs.join(' ')}><Data ss:Type="${dataType}">${dataValue}</Data></Cell>`;
+    }
+
+    function excelXmlRow(cells, height='22'){
+      return `<Row ss:AutoFitHeight="0" ss:Height="${height}">${cells.map(excelXmlCell).join('')}</Row>`;
+    }
+
+    function exportExcelXml(rows){
+      const exportRows = rows.filter(r => {
+        return ['tripNo','productName','batchNo','tankCode','bags','kg','pallets','remark','location']
+          .some(f => String(r[f] ?? '').trim() !== '');
+      });
+
+      if(!exportRows.length){
+        alert('ยังไม่มีข้อมูลสำหรับส่งออก Excel');
+        return;
+      }
+
+      const dateMergeDown = Math.max(exportRows.length - 1, 0);
+      const noSpans = buildAdjacentSpans(exportRows, r => String(r.tripNo ?? '').trim());
+      const locationSpans = buildAdjacentSpans(exportRows, r => normalizedTank(r.tankCode));
+      const groupStyles = buildTankGroupStyles(exportRows);
+      const title = `แผนการขนย้ายสินค้าไปคลังสินค้าด้านนอก (KNS)  ${thaiMonthYear(currentDate)}`;
+      const header = ['Date','No.','Product name','Batch No.','Tank code','Quantity (bag)','Quantity (Kg)','Quantity (pallet)','Remark','LOCATION'];
+
+      const sheetRows = [];
+      sheetRows.push(excelXmlRow([{ col:1, value:title, style:'title', mergeAcross:9 }], '30'));
+      sheetRows.push(excelXmlRow([{ col:1, value:'', style:'blank' }], '18'));
+      sheetRows.push(excelXmlRow(header.map((h, idx) => ({
+        col: idx + 1,
+        value: h,
+        style: idx === 9 ? 'locHeader' : 'header'
+      })), '24'));
+
+      exportRows.forEach((row, index) => {
+        const rowStyle = groupStyles[index] || 'body';
+        const cells = [];
+        if(index === 0){
+          cells.push({ col:1, value:formatDateThaiLike(currentDate), style:'dateCell', mergeDown:dateMergeDown });
+        }
+
+        const noInfo = noSpans.get(index) || { show:true, span:1 };
+        if(noInfo.show){
+          cells.push({ col:2, value:row.tripNo ?? '', style:rowStyle, type:'Number', mergeDown:Math.max(noInfo.span - 1, 0) });
+        }
+
+        cells.push({ col:3, value:row.productName ?? '', style:rowStyle });
+        cells.push({ col:4, value:row.batchNo ?? '', style:rowStyle });
+        cells.push({ col:5, value:row.tankCode ?? '', style:rowStyle });
+        cells.push({ col:6, value:row.bags ?? '', style:rowStyle, type:'Number' });
+        cells.push({ col:7, value:row.kg ?? '', style:rowStyle, type:'Number' });
+        cells.push({ col:8, value:row.pallets ?? '', style:rowStyle, type:'Number' });
+        cells.push({ col:9, value:row.remark ?? '', style:rowStyle });
+
+        const locInfo = locationSpans.get(index) || { show:true, span:1 };
+        if(locInfo.show){
+          const loc = getDisplayLocation(row);
+          const locStyle = String(loc).includes('ส่งออก') ? 'locationExport' : rowStyle;
+          cells.push({
+            col:10,
+            value: loc,
+            style: locStyle,
+            mergeDown: Math.max(locInfo.span - 1, 0)
+          });
+        }
+        sheetRows.push(excelXmlRow(cells, '21'));
+      });
+
+      const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Author>KNS Transport</Author>
+  <Created>${new Date().toISOString()}</Created>
+ </DocumentProperties>
+ <ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel">
+  <ProtectStructure>False</ProtectStructure>
+  <ProtectWindows>False</ProtectWindows>
+ </ExcelWorkbook>
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Tahoma" ss:Size="10"/></Style>
+  <Style ss:ID="blank"><Font ss:FontName="Tahoma" ss:Size="10"/></Style>
+  <Style ss:ID="title"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Tahoma" ss:Size="12" ss:Bold="1"/></Style>
+  <Style ss:ID="header"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1"/><Interior ss:Color="#BFE8F3" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="locHeader"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1"/><Interior ss:Color="#FFFF00" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="body"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10"/></Style>
+  <Style ss:ID="bodyYellow"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10"/><Interior ss:Color="#FFFFCC" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="bodyBlue"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10"/><Interior ss:Color="#DAEEF3" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="exportRow"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10"/><Interior ss:Color="#FFFFCC" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="locationExport"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#D92D20"/><Interior ss:Color="#FFFF00" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="dateCell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders><Font ss:FontName="Tahoma" ss:Size="10"/></Style>
+ </Styles>
+ <Worksheet ss:Name="${excelXmlEscape(currentPage)}">
+  <Table ss:ExpandedColumnCount="10" ss:ExpandedRowCount="${exportRows.length + 3}" x:FullColumns="1" x:FullRows="1">
+   <Column ss:AutoFitWidth="0" ss:Width="64"/>
+   <Column ss:AutoFitWidth="0" ss:Width="48"/>
+   <Column ss:AutoFitWidth="0" ss:Width="190"/>
+   <Column ss:AutoFitWidth="0" ss:Width="120"/>
+   <Column ss:AutoFitWidth="0" ss:Width="120"/>
+   <Column ss:AutoFitWidth="0" ss:Width="98"/>
+   <Column ss:AutoFitWidth="0" ss:Width="104"/>
+   <Column ss:AutoFitWidth="0" ss:Width="92"/>
+   <Column ss:AutoFitWidth="0" ss:Width="260"/>
+   <Column ss:AutoFitWidth="0" ss:Width="116"/>
+   ${sheetRows.join('\n   ')}
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <PageSetup><Layout x:Orientation="Landscape"/><Header x:Margin="0.3"/><Footer x:Margin="0.3"/><PageMargins x:Bottom="0.5" x:Left="0.3" x:Right="0.3" x:Top="0.5"/></PageSetup>
+   <FitToPage/>
+   <Print><FitWidth>1</FitWidth><FitHeight>0</FitHeight><ValidPrinterInfo/></Print>
+   <Selected/>
+   <FreezePanes/>
+   <FrozenNoSplit/>
+   <SplitHorizontal>3</SplitHorizontal>
+   <TopRowBottomPane>3</TopRowBottomPane>
+   <ActivePane>2</ActivePane>
+   <Panes><Pane><Number>3</Number></Pane><Pane><Number>2</Number></Pane></Panes>
+   <ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`;
+
+      const blob = new Blob(['\ufeff', xml], { type:'application/vnd.ms-excel;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `KNS-${currentPage}-${currentDate}.xls`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
     function parseCSVLine(line){
       const out = [];
       let cur = "", quote = false;
@@ -2019,7 +2232,7 @@
 
     $("addRowBtn").addEventListener("click", () => addRow());
     $("exportBtn").addEventListener("click", () => {
-      downloadText(`KNS-${currentPage}-${currentDate}.csv`, toCSV(rowsCache));
+      exportExcelXml(rowsCache);
     });
     $("copyYesterdayBtn").addEventListener("click", copyYesterday);
 
