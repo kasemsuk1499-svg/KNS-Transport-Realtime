@@ -1476,10 +1476,10 @@
       ].filter(Boolean).join(' ');
       return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
         <div class="location-editor">
-          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="null">${escapeHtml(editValue)}</textarea>
+          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="">${escapeHtml(editValue)}</textarea>
           <div class="location-quick">
-            <input list="locationPlaceList" autocomplete="off" data-location-place="${row.id}" placeholder="null" />
-            <input list="locationCountList" autocomplete="off" data-location-count="${row.id}" placeholder="null" />
+            <input list="locationPlaceList" autocomplete="off" data-location-place="${row.id}" placeholder="" />
+            <input list="locationCountList" autocomplete="off" data-location-count="${row.id}" placeholder="" />
             <button type="button" data-action="add-location-part" data-id="${row.id}">+ เพิ่ม</button>
           </div>
           <div class="location-meta">${escapeHtml(note)} ${merged}</div>
