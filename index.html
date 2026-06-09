@@ -358,31 +358,6 @@
       border-radius:8px;
       background:rgba(255,255,255,.35) !important;
     }
-    .location-quick{
-      display:grid;
-      grid-template-columns:minmax(90px,1fr) 76px auto;
-      gap:4px;
-      margin-top:4px;
-      align-items:center;
-    }
-    .location-quick input{
-      min-height:28px;
-      height:28px;
-      padding:3px 6px;
-      border:1px solid rgba(0,0,0,.25);
-      border-radius:7px;
-      background:rgba(255,255,255,.78);
-      font-size:12px;
-      text-align:left;
-    }
-    .location-quick button{
-      min-height:28px;
-      padding:3px 7px;
-      border-radius:7px;
-      font-size:12px;
-      box-shadow:none;
-      white-space:nowrap;
-    }
     .location-cell .location-meta{
       position:static;
       display:block;
@@ -737,7 +712,7 @@
           <b id="syncText">กำลังเชื่อมต่อ...</b>
           <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — พิมพ์ให้เสร็จก่อน แล้วกด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึกและซิงก์เรียลไทม์</span>
         </div>
-        <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • Product พิมพ์ค้นหาเลือกจากฐาน CSV ได้ • ช่องสีเหลืองอ่อน = ยังไม่บันทึก</div>
+        <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • Product พิมพ์ค้นหาเลือกจากฐาน CSV ได้ • ช่อง LOCATION พิมพ์เองได้อิสระ • ช่องสีเหลืองอ่อน = ยังไม่บันทึก</div>
       </div>
 
       <div class="table-wrap">
@@ -762,8 +737,6 @@
           </tbody>
         </table>
         <datalist id="productList"></datalist>
-        <datalist id="locationPlaceList"></datalist>
-        <datalist id="locationCountList"></datalist>
       </div>
     </section>
   </main>
@@ -1280,22 +1253,6 @@
       return String(locationText || '').trim();
     }
 
-    function commonLocationPlaces(){
-      return VALID_LOCATION_PLACES;
-    }
-
-    function renderLocationDatalists(){
-      const placeList = $('locationPlaceList');
-      const countList = $('locationCountList');
-      if(placeList){
-        placeList.innerHTML = commonLocationPlaces().map(name => `<option value="${escapeAttr(name)}"></option>`).join('');
-      }
-      if(countList){
-        const counts = Array.from({length:60}, (_,i)=>String(i+1));
-        countList.innerHTML = counts.map(n => `<option value="${n}"></option>`).join('');
-      }
-    }
-
     function hasExportLocation(row){
       return getDisplayLocation(row).includes('ส่งออก');
     }
@@ -1477,11 +1434,6 @@
       return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
         <div class="location-editor">
           <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="">${escapeHtml(editValue)}</textarea>
-          <div class="location-quick">
-            <input list="locationPlaceList" autocomplete="off" data-location-place="${row.id}" placeholder="" />
-            <input list="locationCountList" autocomplete="off" data-location-count="${row.id}" placeholder="" />
-            <button type="button" data-action="add-location-part" data-id="${row.id}">+ เพิ่ม</button>
-          </div>
           <div class="location-meta">${escapeHtml(note)} ${merged}</div>
         </div>
       </td>`;
@@ -1675,7 +1627,6 @@
         </tr>`;
       }).join("");
       renderProductDatalist();
-      renderLocationDatalists();
     }
 
     function escapeHtml(v){
@@ -1988,29 +1939,6 @@
     }
 
 
-    function addLocationPart(id){
-      const placeInput = tbody.querySelector(`[data-location-place="${CSS.escape(id)}"]`);
-      const countInput = tbody.querySelector(`[data-location-count="${CSS.escape(id)}"]`);
-      const textEl = tbody.querySelector(`[data-id="${CSS.escape(id)}"][data-field="location"]`);
-      if(!placeInput || !textEl) return;
-      const place = String(placeInput.value || '').trim();
-      const count = String(countInput?.value || '').replace(/[^0-9.]/g,'').trim();
-      if(!place){
-        placeInput.focus();
-        return;
-      }
-      const normalizedPlace = normalizeLocationPlace(place);
-      const parts = splitLocationParts(textEl.value);
-      const nextParts = [...parts, {place: normalizedPlace || place, count}];
-      textEl.value = nextParts.length === 1
-        ? (normalizedPlace || place)
-        : nextParts.map(item => item.count ? `${item.place}=${item.count}เลท` : item.place).join('\n');
-      placeInput.value = '';
-      if(countInput) countInput.value = '';
-      markUnsaved(textEl);
-      commitSave(textEl, false);
-    }
-
     function calcExportRemark(totalBags, totalKg, fallbackRemark=""){
       const bags = num(totalBags);
       const kg = num(totalKg);
@@ -2274,7 +2202,6 @@
     tbody.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
       if(!btn) return;
-      if(btn.dataset.action === "add-location-part") addLocationPart(btn.dataset.id);
       if(btn.dataset.action === "insert-item") insertItemAfter(btn.dataset.id);
       if(btn.dataset.action === "insert-trip") insertTripAfter(btn.dataset.id);
       if(btn.dataset.action === "trip-status") setTripStatus(btn.dataset.id, btn.dataset.status);
