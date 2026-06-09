@@ -257,7 +257,7 @@
     .col-pack{min-width:95px}
     .col-remark{min-width:260px}
     .col-location{min-width:150px}
-    .col-actions{min-width:250px}
+    .col-actions{min-width:360px}
     .row-actions{
       display:flex;
       gap:5px;
@@ -274,6 +274,61 @@
       box-shadow:none;
       white-space:nowrap;
     }
+
+    .trip-status-actions{
+      display:flex;
+      gap:4px;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+      width:100%;
+      padding-top:3px;
+      border-top:1px dashed rgba(0,0,0,.18);
+      margin-top:2px;
+    }
+    .trip-status-actions button{
+      font-weight:800;
+    }
+    .trip-status-actions .status-ok-btn{background:#188038;color:#fff}
+    .trip-status-actions .status-mismatch-btn{background:#d92d20;color:#fff}
+    .trip-status-actions .status-rollover-btn{background:#f79009;color:#111}
+    .trip-status-chip{
+      display:inline-block;
+      width:100%;
+      padding:3px 6px;
+      border-radius:999px;
+      background:#eef5f9;
+      border:1px solid var(--line);
+      color:#344054;
+      font-size:11px;
+      font-weight:900;
+      text-align:center;
+    }
+    tr.trip-status-ok td,
+    tr.trip-status-ok input,
+    tr.trip-status-ok textarea,
+    tr.trip-status-ok select{
+      background:#dcfae6 !important;
+    }
+    tr.trip-status-mismatch td,
+    tr.trip-status-mismatch input,
+    tr.trip-status-mismatch textarea,
+    tr.trip-status-mismatch select{
+      background:#ffe4e8 !important;
+    }
+    tr.trip-status-rollover td,
+    tr.trip-status-rollover input,
+    tr.trip-status-rollover textarea,
+    tr.trip-status-rollover select{
+      background:#fff0c2 !important;
+    }
+    tr.trip-status-ok td:first-child{box-shadow:inset 5px 0 0 #12b76a}
+    tr.trip-status-mismatch td:first-child{box-shadow:inset 5px 0 0 #f04438}
+    tr.trip-status-rollover td:first-child{box-shadow:inset 5px 0 0 #f79009}
+    body[data-page="PTR"] .trip-status-actions .status-ok-btn{background:#188038;color:#fff}
+    body[data-page="PTR"] .trip-status-actions .status-mismatch-btn{background:#d92d20;color:#fff}
+    body[data-page="PTR"] .trip-status-actions .status-rollover-btn{background:#f79009;color:#111}
+
     .product-input{
       text-align:left;
       padding-left:10px;
@@ -825,6 +880,12 @@
       "tripNo","productName","batchNo","tankCode",
       "bags","kg","pallets","packType","remark","location"
     ];
+
+    const TRIP_STATUS = {
+      ok: { label:"บอกงานตรงแผนเรียบร้อย", short:"ตรงแผนเรียบร้อย", className:"trip-status-ok" },
+      mismatch: { label:"งานไม่ตรงแผน", short:"งานไม่ตรงแผน", className:"trip-status-mismatch" },
+      rollover: { label:"เลื่อนไปลงพรุ่งนี้", short:"เลื่อนไปลงพรุ่งนี้ / คันตกค้าง", className:"trip-status-rollover" }
+    };
 
 
     function todoStorageKey(){
@@ -1448,6 +1509,126 @@
       return !!tbody.querySelector("input.dirty, textarea.dirty, select.dirty, input.saving, textarea.saving, select.saving");
     }
 
+    function normalizedTripNo(row){
+      return String(row?.tripNo ?? '').trim();
+    }
+
+    function rowsInSameTripById(id){
+      const row = rowsCache.find(r => r.id === id);
+      if(!row) return [];
+      const trip = normalizedTripNo(row);
+      if(!trip) return [row];
+      return rowsCache.filter(r => normalizedTripNo(r) === trip);
+    }
+
+    function tripStatusForRow(row){
+      const trip = normalizedTripNo(row);
+      const match = trip ? rowsCache.find(r => normalizedTripNo(r) === trip && r.tripStatus) : row;
+      const value = match?.tripStatus || row?.tripStatus || '';
+      return TRIP_STATUS[value] ? value : '';
+    }
+
+    function tripStatusClass(row){
+      const status = tripStatusForRow(row);
+      return status ? TRIP_STATUS[status].className : '';
+    }
+
+    function tripStatusChip(row){
+      const status = tripStatusForRow(row);
+      return status ? `<span class="trip-status-chip">สถานะ: ${escapeHtml(TRIP_STATUS[status].short)}</span>` : '';
+    }
+
+    function tripStatusButtons(row, isGroupStart){
+      if(!isGroupStart) return '';
+      const status = tripStatusForRow(row);
+      const activeText = status ? `ตอนนี้: ${TRIP_STATUS[status].short}` : 'ยังไม่เลือกสถานะคันนี้';
+      return `<div class="trip-status-actions" title="${escapeAttr(activeText)}">
+        ${tripStatusChip(row)}
+        <button type="button" class="status-ok-btn" data-action="trip-status" data-status="ok" data-id="${escapeAttr(row.id)}">ตรงแผน</button>
+        <button type="button" class="status-mismatch-btn" data-action="trip-status" data-status="mismatch" data-id="${escapeAttr(row.id)}">ไม่ตรงแผน</button>
+        <button type="button" class="status-rollover-btn" data-action="trip-rollover" data-id="${escapeAttr(row.id)}">เลื่อนไปพรุ่งนี้</button>
+      </div>`;
+    }
+
+    function nextWorkingDateAfter(dateText){
+      const d = new Date(`${dateText}T00:00:00`);
+      d.setDate(d.getDate() + 1);
+      // getDay(): 0 = Sunday; ถ้าวันถัดไปเป็นวันอาทิตย์ ให้ข้ามไปวันจันทร์
+      if(d.getDay() === 0) d.setDate(d.getDate() + 1);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0,10);
+    }
+
+    function addCarryOverRemark(remark){
+      const text = String(remark || '').trim();
+      if(text.includes('คันตกค้าง')) return text || 'คันตกค้าง';
+      return text ? `คันตกค้าง / ${text}` : 'คันตกค้าง';
+    }
+
+    function cleanRowForCopy(row, targetDate){
+      const { id, createdAt, updatedAt, locationSyncedAt, tripStatusUpdatedAt, rolledOverAt, rolledOverTo, ...data } = row;
+      return {
+        ...data,
+        dateText: formatDateThaiLike(targetDate),
+        remark: addCarryOverRemark(data.remark),
+        tripStatus: '',
+        carryOver: true,
+        carryOverFrom: currentDate,
+        carryOverAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+    }
+
+    async function setTripStatus(id, status){
+      if(!TRIP_STATUS[status]) return;
+      const tripRows = rowsInSameTripById(id);
+      if(!tripRows.length) return;
+      const updates = {};
+      for(const row of tripRows){
+        updates[`${row.id}/tripStatus`] = status;
+        updates[`${row.id}/tripStatusUpdatedAt`] = serverTimestamp();
+        updates[`${row.id}/updatedAt`] = serverTimestamp();
+      }
+      await update(rowsRootRef(), updates);
+    }
+
+    async function rolloverTripToNextWorkingDay(id){
+      const tripRows = rowsInSameTripById(id);
+      if(!tripRows.length) return;
+      const targetDate = nextWorkingDateAfter(currentDate);
+      const tripNo = normalizedTripNo(tripRows[0]) || '-';
+      if(!confirm(`ต้องการเลื่อนคัน No. ${tripNo} ไปลงวันที่ ${targetDate} ใช่ไหม?\nระบบจะคัดลอกทั้งคันไปวันถัดไป และกำกับ Remark ว่า "คันตกค้าง"`)) return;
+
+      await setTripStatus(id, 'rollover');
+
+      const targetRowsRef = dateRef(targetDate);
+      const targetSnapshot = await get(targetRowsRef);
+      const targetRows = sortRows(targetSnapshot.val() || {});
+      const baseOrder = targetRows.length
+        ? Math.max(...targetRows.map((r,i) => rowOrderValue(r,i))) + 1000
+        : Date.now();
+
+      const updatesForTarget = {};
+      tripRows.forEach((row, index) => {
+        const newRef = push(targetRowsRef);
+        updatesForTarget[newRef.key] = {
+          ...cleanRowForCopy(row, targetDate),
+          sortOrder: baseOrder + (index * 1000)
+        };
+      });
+      await update(targetRowsRef, updatesForTarget);
+
+      const updatesForCurrent = {};
+      for(const row of tripRows){
+        updatesForCurrent[`${row.id}/rolledOverTo`] = targetDate;
+        updatesForCurrent[`${row.id}/rolledOverAt`] = serverTimestamp();
+        updatesForCurrent[`${row.id}/updatedAt`] = serverTimestamp();
+      }
+      await update(rowsRootRef(), updatesForCurrent);
+      alert(`เลื่อนคัน No. ${tripNo} ไปวันที่ ${targetDate} เรียบร้อยแล้ว`);
+    }
+
     function renderRows(){
       // ถ้าผู้ใช้กำลังพิมพ์อยู่ ยังไม่ให้ realtime render มาทับข้อความที่ยังไม่ได้กด Enter
       if(hasPendingEdit() && tbody.contains(document.activeElement)){
@@ -1467,7 +1648,8 @@
         const classes = [
           tripNum % 2 === 0 ? "trip-alt" : "",
           isGroupStart ? "group-start" : "",
-          isExportRow ? "export-row" : ""
+          isExportRow ? "export-row" : "",
+          tripStatusClass(row)
         ].filter(Boolean).join(" ");
         return `
         <tr class="${classes}">
@@ -1487,6 +1669,7 @@
               <button class="secondary" data-action="insert-trip" data-id="${row.id}" title="เพิ่มคันรถถัดจากคันนี้">+ คัน</button>
               <button class="light" data-action="dup" data-id="${row.id}" title="คัดลอกแถว">คัดลอก</button>
               <button class="danger" data-action="del" data-id="${row.id}" title="ลบแถว">ลบ</button>
+              ${tripStatusButtons(row, isGroupStart)}
             </div>
           </td>
         </tr>`;
@@ -1630,6 +1813,12 @@
         remark: prefill.remark ?? "Plastic pallet (60)",
         location: knownLocation?.location ?? prefill.location ?? "",
         locationUpdatedAt: knownLocation?.updatedAt ?? null,
+        tripStatus: prefill.tripStatus ?? "",
+        carryOver: !!prefill.carryOver,
+        carryOverFrom: prefill.carryOverFrom ?? null,
+        carryOverAt: prefill.carryOverAt ?? null,
+        rolledOverTo: prefill.rolledOverTo ?? null,
+        rolledOverAt: prefill.rolledOverAt ?? null,
         sortOrder: options.sortOrder ?? prefill.sortOrder ?? nextDefaultSortOrder(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -2088,6 +2277,8 @@
       if(btn.dataset.action === "add-location-part") addLocationPart(btn.dataset.id);
       if(btn.dataset.action === "insert-item") insertItemAfter(btn.dataset.id);
       if(btn.dataset.action === "insert-trip") insertTripAfter(btn.dataset.id);
+      if(btn.dataset.action === "trip-status") setTripStatus(btn.dataset.id, btn.dataset.status);
+      if(btn.dataset.action === "trip-rollover") rolloverTripToNextWorkingDay(btn.dataset.id);
       if(btn.dataset.action === "dup") duplicateRow(btn.dataset.id);
       if(btn.dataset.action === "del") deleteRow(btn.dataset.id);
     });
