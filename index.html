@@ -798,6 +798,7 @@
     let unsubscribe = null;
     let tankLocationUnsubscribe = null;
     let productOptionsUnsubscribe = null;
+    let todoUnsubscribe = null;
     let rowsCache = [];
     let tankLocationCache = {};
     let productOptionsCache = {};
@@ -827,7 +828,7 @@
 
 
     function todoStorageKey(){
-      // ใช้ key เดียวตามวันที่ เพื่อให้ STP และ PTR เห็น To Do ชุดเดียวกัน
+      // เก็บสำรองในเครื่องไว้เผื่อกรณีออฟไลน์ แต่ข้อมูลหลักจะอยู่บน Firebase
       return `knsTransportTodo/shared/${currentDate}`;
     }
 
@@ -859,11 +860,42 @@
         category:normalizeTodoCategory(item.category),
         done:false,
         fixed:true,
-        createdAt:index + 1
+        createdAt:index + 1,
+        updatedAt:index + 1
       }));
     }
 
-    function loadTodos(){
+    function todoItemsRef(date=currentDate){
+      // ใช้ path กลางตามวันที่ ไม่แยก STP/PTR เพื่อให้ทุกหน้าและทุกคนเห็น To Do ชุดเดียวกัน
+      return ref(db, `knsTransport/todos/shared/${date}/items`);
+    }
+
+    function todoItemRef(id){
+      return ref(db, `knsTransport/todos/shared/${currentDate}/items/${id}`);
+    }
+
+    function normalizeTodoItem(item, fallbackId){
+      return {
+        id:String(item?.id || fallbackId || makeTodoId()),
+        text:String(item?.text || '').trim() || 'งานใหม่',
+        category:normalizeTodoCategory(item?.category),
+        done:!!item?.done,
+        fixed:!!item?.fixed,
+        createdAt:item?.createdAt || Date.now(),
+        updatedAt:item?.updatedAt || Date.now()
+      };
+    }
+
+    function sortTodoItems(items){
+      const catIndex = (cat) => TODO_CATEGORIES.indexOf(normalizeTodoCategory(cat));
+      return [...items].sort((a,b) => {
+        const ca = catIndex(a.category), cb = catIndex(b.category);
+        if(ca !== cb) return ca - cb;
+        return Number(a.createdAt || 0) - Number(b.createdAt || 0);
+      });
+    }
+
+    function mergedLocalTodoItems(){
       const key = todoStorageKey();
       let saved = readTodoListFromStorage(key);
 
@@ -895,23 +927,47 @@
         const byId = new Map(saved.map(item => [item.id, item]));
         const mergedDefaults = defaultTodoItems().map(item => ({ ...item, ...(byId.get(item.id) || {}) }));
         const customItems = saved.filter(item => item && !String(item.id || '').startsWith('default_'));
-        todoItems = [...mergedDefaults, ...customItems].map(item => ({
-          id:item.id || makeTodoId(),
-          text:String(item.text || '').trim() || 'งานใหม่',
-          category:normalizeTodoCategory(item.category),
-          done:!!item.done,
-          fixed:!!item.fixed,
-          createdAt:item.createdAt || Date.now()
-        }));
-      }else{
-        todoItems = defaultTodoItems();
+        return [...mergedDefaults, ...customItems].map((item, index) => normalizeTodoItem(item, item.id || `local_${index}`));
       }
-      saveTodos();
+      return defaultTodoItems();
     }
 
-    function saveTodos(){
-      localStorage.setItem(todoStorageKey(), JSON.stringify(todoItems));
+    async function seedTodosIfEmpty(){
+      const items = mergedLocalTodoItems();
+      const updates = {};
+      for(const item of items){
+        updates[item.id] = {
+          ...item,
+          synced:true,
+          updatedAt: serverTimestamp()
+        };
+      }
+      await update(todoItemsRef(), updates);
+    }
+
+    function listenTodos(){
+      if(todoUnsubscribe) todoUnsubscribe();
+      todoItems = [];
       renderTodos();
+
+      todoUnsubscribe = onValue(todoItemsRef(), async (snap) => {
+        const raw = snap.val();
+
+        // ถ้าวันนี้ยังไม่มี To Do บน Firebase ให้สร้างชุดเริ่มต้น/ย้ายของเก่าขึ้น Firebase หนึ่งครั้ง
+        if(!raw){
+          await seedTodosIfEmpty();
+          return;
+        }
+
+        todoItems = sortTodoItems(Object.entries(raw).map(([id, item]) => normalizeTodoItem(item, id)));
+        localStorage.setItem(todoStorageKey(), JSON.stringify(todoItems)); // สำรองไว้ เผื่อเน็ตหลุด
+        renderTodos();
+      }, (err) => {
+        console.error(err);
+        // ถ้าอ่าน Firebase ไม่ได้ ให้ fallback เป็นข้อมูลสำรองในเครื่อง เพื่อไม่ให้หน้าใช้งานไม่ได้
+        todoItems = sortTodoItems(mergedLocalTodoItems());
+        renderTodos();
+      });
     }
 
     function renderTodos(){
@@ -940,23 +996,24 @@
       }).join('');
     }
 
-    function addTodo(){
+    async function addTodo(){
       const text = String(todoTextInput.value || '').trim();
       if(!text){ todoTextInput.focus(); return; }
-      todoItems.push({
-        id:makeTodoId(),
+      const newRef = push(todoItemsRef());
+      todoTextInput.value = '';
+      await set(newRef, {
+        id:newRef.key,
         text,
         category:normalizeTodoCategory(todoCategoryInput.value),
         done:false,
         fixed:false,
-        createdAt:Date.now()
+        createdAt:serverTimestamp(),
+        updatedAt:serverTimestamp()
       });
-      todoTextInput.value = '';
-      saveTodos();
       todoTextInput.focus();
     }
 
-    function editTodo(id){
+    async function editTodo(id){
       const item = todoItems.find(x => x.id === id);
       if(!item) return;
       const nextText = prompt('แก้ไขรายการ To Do', item.text);
@@ -964,17 +1021,25 @@
       const cleanText = String(nextText || '').trim();
       if(!cleanText) return;
       const nextCategory = prompt('ใส่หมวด: ระหว่างวัน / เตรียมไว้ตอนเย็น / ด่วน!!', item.category);
-      item.text = cleanText;
-      item.category = normalizeTodoCategory(String(nextCategory || item.category).trim());
-      saveTodos();
+      await update(todoItemRef(id), {
+        text:cleanText,
+        category:normalizeTodoCategory(String(nextCategory || item.category).trim()),
+        updatedAt:serverTimestamp()
+      });
     }
 
-    function deleteTodo(id){
+    async function deleteTodo(id){
       const item = todoItems.find(x => x.id === id);
       if(!item) return;
       if(!confirm(`ต้องการลบรายการนี้ใช่ไหม?\n${item.text}`)) return;
-      todoItems = todoItems.filter(x => x.id !== id);
-      saveTodos();
+      await remove(todoItemRef(id));
+    }
+
+    async function toggleTodoDone(id, done){
+      await update(todoItemRef(id), {
+        done:!!done,
+        updatedAt:serverTimestamp()
+      });
     }
 
     function todayLocal(){
@@ -1237,7 +1302,7 @@
     function listenDate(date){
       currentDate = date;
       applyPageUI();
-      loadTodos();
+      listenTodos();
       if(unsubscribe) unsubscribe();
       if(tankLocationUnsubscribe) tankLocationUnsubscribe();
       if(productOptionsUnsubscribe) productOptionsUnsubscribe();
@@ -2049,10 +2114,7 @@
       const item = todoItems.find(x => x.id === id);
       if(!item) return;
       const action = actionEl.dataset.todoAction;
-      if(action === "toggle"){
-        item.done = actionEl.checked;
-        saveTodos();
-      }
+      if(action === "toggle") toggleTodoDone(id, actionEl.checked);
       if(action === "edit") editTodo(id);
       if(action === "delete") deleteTodo(id);
     });
