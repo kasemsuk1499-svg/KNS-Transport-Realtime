@@ -1476,7 +1476,7 @@
       ].filter(Boolean).join(' ');
       return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
         <div class="location-editor">
-          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="เช่น 1A02=14เลท&#10;2D60=10เลท&#10;ส่งออก">${escapeHtml(editValue)}</textarea>
+          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="">${escapeHtml(editValue)}</textarea>
           <div class="location-quick">
             <input list="locationPlaceList" autocomplete="off" data-location-place="${row.id}" placeholder="เช่น 1A02" />
             <input list="locationCountList" autocomplete="off" data-location-count="${row.id}" placeholder="เลท" />
