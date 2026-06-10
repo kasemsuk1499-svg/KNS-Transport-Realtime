@@ -153,9 +153,9 @@
     body[data-page="PTR"] th{background:var(--ptr-head)}
     body[data-page="PTR"] th.location{background:#c9efb8}
     body[data-page="PTR"] tr.tank-shade-a td{background:#ffffff}
-    body[data-page="PTR"] tr.tank-shade-b td{background:#e8f7ed}
-    body[data-page="PTR"] tr.tank-shade-a td.location-cell,
-    body[data-page="PTR"] tr.tank-shade-b td.location-cell{background:#f3ffe9}
+    body[data-page="PTR"] tr.tank-shade-b td{background:#dff3e6}
+    body[data-page="PTR"] tr.tank-shade-a td.location-cell{background:#fffbe6}
+    body[data-page="PTR"] tr.tank-shade-b td.location-cell{background:#e6f6cf}
     body[data-page="PTR"] .location-meta{color:#376b2b}
     body[data-page="PTR"] input:focus,
     body[data-page="PTR"] textarea:focus,
@@ -1201,12 +1201,24 @@
       return String(tankCode || '').trim().toUpperCase();
     }
 
-    function tankLocationsRef(page=currentPage){
-      return ref(db, `${pageRoot(page)}/tankLocations`);
+    function normalizedProduct(productName){
+      return String(productName || '').trim().replace(/\s+/g, ' ').toUpperCase();
     }
 
-    function tankLocationRef(tankCode){
-      return ref(db, `${pageRoot()}/tankLocations/${encodeTankKey(normalizedTank(tankCode))}`);
+    function makeProductTankKey(productName, tankCode){
+      const product = normalizedProduct(productName);
+      const tank = normalizedTank(tankCode);
+      if(!product || !tank) return '';
+      return `${encodeProductKey(product)}__${encodeTankKey(tank)}`;
+    }
+
+    function productTankLocationsRef(page=currentPage){
+      // จำ Location แยกตาม Product name + Tank code เพื่อไม่ให้ Tank เดียวกันแต่คนละสินค้าเรียกโลผิด
+      return ref(db, `${pageRoot(page)}/productTankLocations`);
+    }
+
+    function productTankLocationRef(productName, tankCode){
+      return ref(db, `${pageRoot()}/productTankLocations/${makeProductTankKey(productName, tankCode)}`);
     }
 
     function encodeProductKey(productName){
@@ -1232,8 +1244,8 @@
     }
 
     function getDisplayLocation(row){
-      const key = encodeTankKey(normalizedTank(row?.tankCode));
-      const meta = tankLocationCache[key] || {};
+      const key = makeProductTankKey(row?.productName, row?.tankCode);
+      const meta = key ? (tankLocationCache[key] || {}) : {};
       return String(meta.location ?? row?.location ?? '').trim();
     }
 
@@ -1333,7 +1345,7 @@
         renderProductDatalist();
       });
 
-      tankLocationUnsubscribe = onValue(tankLocationsRef(), (snap) => {
+      tankLocationUnsubscribe = onValue(productTankLocationsRef(), (snap) => {
         tankLocationCache = snap.val() || {};
         queueLocationSync();
         renderRows();
@@ -1415,8 +1427,8 @@
     }
 
     function locationMetaFor(row){
-      const key = encodeTankKey(normalizedTank(row.tankCode));
-      return tankLocationCache[key] || {};
+      const key = makeProductTankKey(row.productName, row.tankCode);
+      return key ? (tankLocationCache[key] || {}) : {};
     }
 
     function locationCell(row, span=1, count=1){
@@ -1426,7 +1438,7 @@
       const updatedAt = meta.updatedAt || row.locationUpdatedAt;
       const recently = isRecentlyUpdated(updatedAt);
       const note = updatedAt ? `แก้ไขล่าสุด ${formatUpdateTime(updatedAt)}` : "ยังไม่มีประวัติแก้ไข Location";
-      const merged = count > 1 ? `<span class="location-merged-note">รวม ${count} แถว Tank เดียวกัน</span>` : "";
+      const merged = count > 1 ? `<span class="location-merged-note">รวม ${count} แถว Product+Tank เดียวกัน</span>` : "";
       const isExport = String(locationValue).includes('ส่งออก');
       const classes = [
         'location-cell',
@@ -1444,10 +1456,10 @@
     function buildLocationSpans(rows){
       const spans = new Map();
       for(let i=0; i<rows.length; i++){
-        const tank = normalizedTank(rows[i].tankCode);
-        if(!tank){ spans.set(rows[i].id, { show:true, span:1, count:1 }); continue; }
+        const key = makeProductTankKey(rows[i].productName, rows[i].tankCode);
+        if(!key){ spans.set(rows[i].id, { show:true, span:1, count:1 }); continue; }
         let count = 1;
-        while(i + count < rows.length && normalizedTank(rows[i + count].tankCode) === tank){
+        while(i + count < rows.length && makeProductTankKey(rows[i + count].productName, rows[i + count].tankCode) === key){
           count++;
         }
         spans.set(rows[i].id, { show:true, span:count, count });
@@ -1460,16 +1472,18 @@
     }
 
     function buildTankShadeClasses(rows){
-      // สลับสีตาม Tank code ที่พบในตาราง โดย Tank code เดียวกันจะได้เฉดเดียวกัน
+      // สลับสีตามบล็อก Product name + Tank code ที่อยู่ติดกัน
+      // เพื่อให้เมื่อเปลี่ยน Product/Tank ถัดไป สีต้องสลับทันที ไม่ใช้สีจากลำดับที่เคยเจอทั้งตาราง
       const classes = new Map();
-      const tankOrder = new Map();
-      let index = 0;
+      let shadeIndex = -1;
+      let previousKey = null;
       for(const row of rows){
-        const tank = normalizedTank(row.tankCode) || `__NO_TANK__${row.id}`;
-        if(!tankOrder.has(tank)){
-          tankOrder.set(tank, index++);
+        const key = makeProductTankKey(row.productName, row.tankCode) || `__NO_PRODUCT_TANK__${row.id}`;
+        if(key !== previousKey){
+          shadeIndex++;
+          previousKey = key;
         }
-        classes.set(row.id, tankOrder.get(tank) % 2 === 0 ? 'tank-shade-a' : 'tank-shade-b');
+        classes.set(row.id, shadeIndex % 2 === 0 ? 'tank-shade-a' : 'tank-shade-b');
       }
       return classes;
     }
@@ -1664,11 +1678,29 @@
     async function syncRowsWithTankLocations(){
       if(!rowsCache.length) return;
       const updates = {};
+      const memoryUpdates = {};
       let changed = false;
+      let memoryChanged = false;
       for(const row of rowsCache){
-        const tank = normalizedTank(row.tankCode);
-        if(!tank) continue;
-        const meta = tankLocationCache[encodeTankKey(tank)];
+        const key = makeProductTankKey(row.productName, row.tankCode);
+        if(!key) continue;
+        const meta = tankLocationCache[key];
+
+        // ถ้าแถวเก่ามี Location อยู่แล้ว แต่ยังไม่มีประวัติแบบ Product+Tank ให้บันทึกขึ้นฐานใหม่อัตโนมัติ
+        if((!meta || meta.location === undefined) && String(row.location ?? '').trim()){
+          memoryUpdates[key] = {
+            productName: String(row.productName || '').trim(),
+            productKey: normalizedProduct(row.productName),
+            tankCode: normalizedTank(row.tankCode),
+            location: String(row.location || '').trim(),
+            updatedAt: row.locationUpdatedAt || serverTimestamp(),
+            page: currentPage,
+            sourceDate: currentDate
+          };
+          memoryChanged = true;
+          continue;
+        }
+
         if(!meta || meta.location === undefined) continue;
         if(String(row.location ?? '') !== String(meta.location ?? '')){
           updates[`${row.id}/location`] = meta.location ?? '';
@@ -1677,26 +1709,30 @@
           changed = true;
         }
       }
+      if(memoryChanged){
+        await update(productTankLocationsRef(), memoryUpdates);
+      }
       if(changed){
         await update(rowsRootRef(), updates);
       }
     }
 
-    async function getKnownLocation(tankCode){
-      const tank = normalizedTank(tankCode);
-      if(!tank) return null;
-      const local = tankLocationCache[encodeTankKey(tank)];
+    async function getKnownLocation(productName, tankCode){
+      const key = makeProductTankKey(productName, tankCode);
+      if(!key) return null;
+      const local = tankLocationCache[key];
       if(local && local.location !== undefined) return local;
-      const snap = await get(tankLocationRef(tank));
+      const snap = await get(productTankLocationRef(productName, tankCode));
       return snap.val();
     }
 
     async function saveLocationForTank(rowId, locationValue){
-      // เก็บข้อความ Location ตามที่พิมพ์ เพื่อรองรับหมายเหตุอิสระ
+      // เก็บข้อความ Location ตาม Product name + Tank code เพื่อรองรับ Tank เดียวกันแต่คนละสินค้า
       locationValue = String(locationValue || '').trim();
       const row = rowsCache.find(r => r.id === rowId);
+      const product = normalizedProduct(row?.productName);
       const tank = normalizedTank(row?.tankCode);
-      if(!tank){
+      if(!product || !tank){
         await update(rowRef(rowId), {
           location: locationValue,
           locationUpdatedAt: serverTimestamp(),
@@ -1705,17 +1741,19 @@
         return;
       }
       const payload = {
+        productName: String(row?.productName || '').trim(),
+        productKey: product,
         tankCode: tank,
         location: locationValue,
         updatedAt: serverTimestamp(),
         page: currentPage,
         sourceDate: currentDate
       };
-      await set(tankLocationRef(tank), payload);
+      await set(productTankLocationRef(row.productName, tank), payload);
 
       const updates = {};
       for(const r of rowsCache){
-        if(normalizedTank(r.tankCode) === tank){
+        if(makeProductTankKey(r.productName, r.tankCode) === makeProductTankKey(row.productName, tank)){
           updates[`${r.id}/location`] = locationValue;
           updates[`${r.id}/locationUpdatedAt`] = serverTimestamp();
           updates[`${r.id}/updatedAt`] = serverTimestamp();
@@ -1729,20 +1767,24 @@
       await update(rowsRootRef(), updates);
     }
 
-    async function applyLocationAfterTankChange(rowId, tankCode){
+    async function applyLocationAfterProductOrTankChange(rowId, productName, tankCode){
+      const product = normalizedProduct(productName);
       const tank = normalizedTank(tankCode);
-      if(!tank) return;
-      const known = await getKnownLocation(tank);
+      if(!product || !tank) return;
+      const known = await getKnownLocation(productName, tank);
       const row = rowsCache.find(r => r.id === rowId);
       if(known && known.location !== undefined){
         await update(rowRef(rowId), {
+          productName: String(productName || '').trim(),
           tankCode: tank,
           location: known.location ?? '',
           locationUpdatedAt: known.updatedAt || serverTimestamp(),
           updatedAt: serverTimestamp()
         });
       }else if(row?.location){
-        await set(tankLocationRef(tank), {
+        await set(productTankLocationRef(productName, tank), {
+          productName: String(productName || '').trim(),
+          productKey: product,
           tankCode: tank,
           location: row.location,
           updatedAt: serverTimestamp(),
@@ -1768,8 +1810,8 @@
         ? Math.max(...rowsCache.map(r => num(r.tripNo))) + 1
         : 1;
       const tank = normalizedTank(prefill.tankCode ?? "");
-      const knownLocation = tank ? await getKnownLocation(tank) : null;
       const productName = prefill.productName ?? "";
+      const knownLocation = productName && tank ? await getKnownLocation(productName, tank) : null;
       const newRef = push(dateRef(currentDate));
       await set(newRef, {
         dateText: formatDateThaiLike(currentDate),
@@ -1909,10 +1951,11 @@
 
           await update(rowRef(id), payload);
           if(field === "tankCode"){
-            await applyLocationAfterTankChange(id, saveValue);
+            await applyLocationAfterProductOrTankChange(id, currentRow.productName, saveValue);
           }
           if(field === "productName"){
             await saveProductOption(saveValue);
+            await applyLocationAfterProductOrTankChange(id, saveValue, currentRow.tankCode);
           }
         }
         el.classList.remove("saving");
