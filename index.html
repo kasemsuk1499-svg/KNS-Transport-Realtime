@@ -152,8 +152,10 @@
     body[data-page="PTR"] .panel-head{border-bottom-color:var(--ptr-line)}
     body[data-page="PTR"] th{background:var(--ptr-head)}
     body[data-page="PTR"] th.location{background:#c9efb8}
-    body[data-page="PTR"] tr.trip-alt td{background:#e8f7ed}
-    body[data-page="PTR"] .location-cell{background:#f3ffe9}
+    body[data-page="PTR"] tr.tank-shade-a td{background:#ffffff}
+    body[data-page="PTR"] tr.tank-shade-b td{background:#e8f7ed}
+    body[data-page="PTR"] tr.tank-shade-a td.location-cell,
+    body[data-page="PTR"] tr.tank-shade-b td.location-cell{background:#f3ffe9}
     body[data-page="PTR"] .location-meta{color:#376b2b}
     body[data-page="PTR"] input:focus,
     body[data-page="PTR"] textarea:focus,
@@ -224,8 +226,14 @@
       white-space:nowrap;
     }
     th.location{background:var(--accent)}
-    tr.trip-alt td{background:#c8edf6}
-    tr.group-start td{border-top:2px solid #222}
+    /* สีพื้นหลังหลัก: สลับตาม Tank code ไม่ใช่สลับตามคัน */
+    tr.tank-shade-a td{background:#ffffff}
+    tr.tank-shade-b td{background:#e9f6fb}
+    tr.tank-shade-a td.location-cell,
+    tr.tank-shade-b td.location-cell{background:#fffbe6}
+    /* แยกคันต่อคันด้วยเส้นทึบหนา */
+    tr.group-start td{border-top:4px solid #111}
+    tr.group-end td{border-bottom:4px solid #111}
     td.visual-blank input{color:transparent; pointer-events:none}
     td.visual-blank input:focus{color:var(--text); pointer-events:auto}
     td input, td textarea, td select{
@@ -304,27 +312,30 @@
       font-weight:900;
       text-align:center;
     }
-    tr.trip-status-ok td,
+    /* สถานะจะทำให้แถบสลับตาม Tank code เข้มขึ้นเล็กน้อย แต่ไม่ลบการสลับสีเดิม */
+    tr.trip-status-ok.tank-shade-a td{background:#e3f8ea !important}
+    tr.trip-status-ok.tank-shade-b td{background:#c8f0d6 !important}
+    tr.trip-status-mismatch.tank-shade-a td{background:#ffe8ec !important}
+    tr.trip-status-mismatch.tank-shade-b td{background:#ffd1da !important}
+    tr.trip-status-rollover.tank-shade-a td{background:#fff2c9 !important}
+    tr.trip-status-rollover.tank-shade-b td{background:#ffe4a3 !important}
+    tr.trip-status-ok td.location-cell{background:#dbf7e5 !important}
+    tr.trip-status-mismatch td.location-cell{background:#ffe1e7 !important}
+    tr.trip-status-rollover td.location-cell{background:#ffedbd !important}
     tr.trip-status-ok input,
     tr.trip-status-ok textarea,
-    tr.trip-status-ok select{
-      background:#dcfae6 !important;
-    }
-    tr.trip-status-mismatch td,
+    tr.trip-status-ok select,
     tr.trip-status-mismatch input,
     tr.trip-status-mismatch textarea,
-    tr.trip-status-mismatch select{
-      background:#ffe4e8 !important;
-    }
-    tr.trip-status-rollover td,
+    tr.trip-status-mismatch select,
     tr.trip-status-rollover input,
     tr.trip-status-rollover textarea,
     tr.trip-status-rollover select{
-      background:#fff0c2 !important;
+      background:transparent !important;
     }
-    tr.trip-status-ok td:first-child{box-shadow:inset 5px 0 0 #12b76a}
-    tr.trip-status-mismatch td:first-child{box-shadow:inset 5px 0 0 #f04438}
-    tr.trip-status-rollover td:first-child{box-shadow:inset 5px 0 0 #f79009}
+    tr.trip-status-ok td:first-child{box-shadow:inset 6px 0 0 #12b76a}
+    tr.trip-status-mismatch td:first-child{box-shadow:inset 6px 0 0 #f04438}
+    tr.trip-status-rollover td:first-child{box-shadow:inset 6px 0 0 #f79009}
     body[data-page="PTR"] .trip-status-actions .status-ok-btn{background:#188038;color:#fff}
     body[data-page="PTR"] .trip-status-actions .status-mismatch-btn{background:#d92d20;color:#fff}
     body[data-page="PTR"] .trip-status-actions .status-rollover-btn{background:#f79009;color:#111}
@@ -1258,17 +1269,8 @@
     }
 
     function locationColorStyle(locationText){
-      const text = String(locationText || '').trim();
-      if(!text) return '';
-      let hash = 0;
-      for(let i = 0; i < text.length; i++){
-        hash = ((hash << 5) - hash) + text.charCodeAt(i);
-        hash |= 0;
-      }
-      const hue = Math.abs(hash) % 360;
-      const bg = `hsl(${hue}, 82%, 88%)`;
-      const metaBg = `hsl(${hue}, 90%, 82%)`;
-      return `--location-bg:${bg};--location-meta-bg:${metaBg};background:${bg};`;
+      // ไม่สุ่มสีตามข้อความ Location แล้ว เพื่อให้ช่อง Location เป็นสีเดียว อ่านง่าย ไม่สับสน
+      return '--location-bg:#fffbe6;--location-meta-bg:#fff0b3;';
     }
 
     function isRecentlyUpdated(ts){
@@ -1457,6 +1459,21 @@
       return spans;
     }
 
+    function buildTankShadeClasses(rows){
+      // สลับสีตาม Tank code ที่พบในตาราง โดย Tank code เดียวกันจะได้เฉดเดียวกัน
+      const classes = new Map();
+      const tankOrder = new Map();
+      let index = 0;
+      for(const row of rows){
+        const tank = normalizedTank(row.tankCode) || `__NO_TANK__${row.id}`;
+        if(!tankOrder.has(tank)){
+          tankOrder.set(tank, index++);
+        }
+        classes.set(row.id, tankOrder.get(tank) % 2 === 0 ? 'tank-shade-a' : 'tank-shade-b');
+      }
+      return classes;
+    }
+
     function hasPendingEdit(){
       return !!tbody.querySelector("input.dirty, textarea.dirty, select.dirty, input.saving, textarea.saving, select.saving");
     }
@@ -1591,15 +1608,18 @@
         return;
       }
       const locationSpans = buildLocationSpans(rowsCache);
+      const tankShadeClasses = buildTankShadeClasses(rowsCache);
       tbody.innerHTML = rowsCache.map((row, index) => {
         const prev = rowsCache[index - 1];
+        const next = rowsCache[index + 1];
         const isGroupStart = index === 0 || String(prev?.tripNo ?? "") !== String(row.tripNo ?? "");
-        const tripNum = num(row.tripNo);
+        const isGroupEnd = index === rowsCache.length - 1 || String(next?.tripNo ?? "") !== String(row.tripNo ?? "");
         const spanInfo = locationSpans.get(row.id) || { show:true, span:1, count:1 };
         const isExportRow = hasExportLocation(row);
         const classes = [
-          tripNum % 2 === 0 ? "trip-alt" : "",
+          tankShadeClasses.get(row.id) || 'tank-shade-a',
           isGroupStart ? "group-start" : "",
+          isGroupEnd ? "group-end" : "",
           isExportRow ? "export-row" : "",
           tripStatusClass(row)
         ].filter(Boolean).join(" ");
