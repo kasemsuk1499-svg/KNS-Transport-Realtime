@@ -2324,19 +2324,32 @@
     function createWeeklySheet(year, monthIndex, monthRows){
       const st = excelBaseStyles();
       const dataRows = groupRowsForWeekly(monthRows.filter(row => Number(String(row.date).slice(5,7)) === monthIndex + 1));
-      // โครงหัวตารางตามไฟล์อ้างอิง: แถว 1 = หัวกลุ่ม / แถว 2 = หัวย่อย / แถว 3 = filter/header หลัก
-      const bodyStart = 3; // แถวข้อมูลเริ่มที่แถว 4 ใน Excel
-      const colCount = 17; // A:Q
-      const minRows = 40;
-      const totalRows = Math.max(minRows, dataRows.length + bodyStart + 8);
-      const aoa = Array.from({length: totalRows}, () => Array(colCount).fill(''));
+
+      // ให้ตาราง Weekly เริ่มที่เซลล์ E8 ตามที่ต้องการ
+      // startRow/startCol เป็น index แบบ 0-based: E8 = row 7, col 4
+      const startRow = 7;
+      const startCol = 4;
+      const tableColCount = 17; // E:U เมื่อเลื่อนจากโครงเดิม A:Q
+      const headerRow = startRow + 2; // แถว filter/header หลัก = E10:U10
+      const bodyStart = startRow + 3; // แถวข้อมูลเริ่มที่ E11
+      const minTableRows = 40;
+      const totalRows = Math.max(startRow + minTableRows, bodyStart + dataRows.length + 8);
+      const totalCols = startCol + tableColCount;
+      const aoa = Array.from({length: totalRows}, () => Array(totalCols).fill(''));
       const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const col = (relativeCol) => startCol + relativeCol;
+      const row = (relativeRow) => startRow + relativeRow;
+      const colName = (relativeCol) => XLSX.utils.encode_col(col(relativeCol));
+      const tableRange = (r1, c1, r2, c2) => ({s:{r:row(r1), c:col(c1)}, e:{r:row(r2), c:col(c2)}});
+      const absoluteTableEndCol = col(tableColCount - 1);
+
       ws['!cols'] = [
+        {wch:3},{wch:3},{wch:3},{wch:3},
         {wch:13},{wch:13},{wch:10},{wch:34},{wch:18},{wch:34},{wch:7},
         {wch:13},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:13},
         {wch:9},{wch:9},{wch:12}
       ];
-      ws['!rows'] = Array.from({length: totalRows}, (_,i) => ({ hpt: i < 2 ? 24 : 20 }));
+      ws['!rows'] = Array.from({length: totalRows}, (_,i) => ({ hpt: i >= startRow && i < startRow + 2 ? 24 : 20 }));
       ws['!merges'] = [];
 
       const groupHeader = {
@@ -2373,33 +2386,33 @@
         fill:{fgColor:{rgb:'D9D9D9'}}
       };
 
-      // แถวบนสุดเหมือนภาพอ้างอิง
-      setCell(ws, 0, 0, `ตารางสรุปนำเข้า (Inbound) ประจำเดือน ${MONTH_FULL_TH[monthIndex]}`, st.title);
-      ws['!merges'].push({s:{r:0,c:0}, e:{r:0,c:6}});
+      // แถวบนสุดเหมือนภาพอ้างอิง แต่เริ่มที่ E8
+      setCell(ws, row(0), col(0), `ตารางสรุปนำเข้า (Inbound) ประจำเดือน ${MONTH_FULL_TH[monthIndex]}`, st.title);
+      ws['!merges'].push(tableRange(0, 0, 0, 6));
 
-      setCell(ws, 0, 7, "Original\nPlan\nQ'ty", groupHeader);
-      setCell(ws, 0, 8, 'Revise\n1', groupHeader);
-      setCell(ws, 0, 9, 'Revise\n2', groupHeader);
-      setCell(ws, 0, 10, 'Revise\n3', groupHeader);
-      setCell(ws, 0, 11, 'Revise\n4', groupHeader);
-      setCell(ws, 0, 12, 'Revise\n5', groupHeader);
-      setCell(ws, 0, 13, 'Actual\nShip', groupHeaderGreen);
-      ws['!merges'].push({s:{r:0,c:13}, e:{r:0,c:15}});
-      setCell(ws, 0, 16, 'Total Ctn', headerWhite);
-      ws['!merges'].push({s:{r:0,c:16}, e:{r:2,c:16}});
+      setCell(ws, row(0), col(7), "Original\nPlan\nQ'ty", groupHeader);
+      setCell(ws, row(0), col(8), 'Revise\n1', groupHeader);
+      setCell(ws, row(0), col(9), 'Revise\n2', groupHeader);
+      setCell(ws, row(0), col(10), 'Revise\n3', groupHeader);
+      setCell(ws, row(0), col(11), 'Revise\n4', groupHeader);
+      setCell(ws, row(0), col(12), 'Revise\n5', groupHeader);
+      setCell(ws, row(0), col(13), 'Actual\nShip', groupHeaderGreen);
+      ws['!merges'].push(tableRange(0, 13, 0, 15));
+      setCell(ws, row(0), col(16), 'Total Ctn', headerWhite);
+      ws['!merges'].push(tableRange(0, 16, 2, 16));
 
       // หัวย่อย Pallet / JB / PP
-      for(let c=7; c<=13; c++) setCell(ws, 1, c, 'Pallet', c === 13 ? subHeaderGreen : subHeaderBlue);
-      setCell(ws, 1, 14, 'JB', subHeaderGreen);
-      setCell(ws, 1, 15, 'PP', subHeaderGreen);
+      for(let c=7; c<=13; c++) setCell(ws, row(1), col(c), 'Pallet', c === 13 ? subHeaderGreen : subHeaderBlue);
+      setCell(ws, row(1), col(14), 'JB', subHeaderGreen);
+      setCell(ws, row(1), col(15), 'PP', subHeaderGreen);
 
       // หัวหลักแถว filter
       const headers = ['Day','Date','Round','Products','Add Code','Ref Name','Ty'];
-      headers.forEach((h, i) => setCell(ws, 2, i, h, i === 6 ? typeHeader : headerWhite));
-      for(let c=7; c<=15; c++) setCell(ws, 2, c, '', c >= 13 ? subHeaderGreen : subHeaderBlue);
+      headers.forEach((h, i) => setCell(ws, row(2), col(i), h, i === 6 ? typeHeader : headerWhite));
+      for(let c=7; c<=15; c++) setCell(ws, row(2), col(c), '', c >= 13 ? subHeaderGreen : subHeaderBlue);
 
       if(!dataRows.length){
-        applyRangeStyle(ws, 0, 0, 8, colCount - 1, st.blank);
+        applyRangeStyle(ws, startRow, startCol, startRow + 8, absoluteTableEndCol, st.blank);
         return ws;
       }
 
@@ -2407,43 +2420,43 @@
       const truckRanges = new Map();
       let rowIndex = bodyStart;
 
-      for(const row of dataRows){
-        const d = jsDateFromISO(row.date);
-        const type = row.type || productType(row);
-        const fillBase = row.page === 'PTR' ? st.ptr : st.stp;
-        const textBase = row.page === 'PTR' ? st.ptrText : st.stpText;
-        const boldBase = row.page === 'PTR' ? st.ptrBold : st.stpBold;
-        const originalQty = num(row.originalQty);
-        const dateKey = row.date;
-        const truckKey = [row.date, row.page, row.tripNo].join('|');
+      for(const rowData of dataRows){
+        const d = jsDateFromISO(rowData.date);
+        const type = rowData.type || productType(rowData);
+        const fillBase = rowData.page === 'PTR' ? st.ptr : st.stp;
+        const textBase = rowData.page === 'PTR' ? st.ptrText : st.stpText;
+        const boldBase = rowData.page === 'PTR' ? st.ptrBold : st.stpBold;
+        const originalQty = num(rowData.originalQty);
+        const dateKey = rowData.date;
+        const truckKey = [rowData.date, rowData.page, rowData.tripNo].join('|');
 
         if(!dateRanges.has(dateKey)) dateRanges.set(dateKey, {start:rowIndex, end:rowIndex});
         dateRanges.get(dateKey).end = rowIndex;
         if(!truckRanges.has(truckKey)) truckRanges.set(truckKey, {start:rowIndex, end:rowIndex, style:boldBase});
         truckRanges.get(truckKey).end = rowIndex;
 
-        setCell(ws, rowIndex, 0, DAY_TH[d.getDay()], st.normalBold);
-        setCell(ws, rowIndex, 1, dayDateText(row.date), st.normalBold);
-        setCell(ws, rowIndex, 2, roundText(row), boldBase);        // R... = คันรถ
-        setCell(ws, rowIndex, 3, row.productName || '', textBase); // รวม Product name เดียวกันในคันแล้ว
-        setCell(ws, rowIndex, 4, '', fillBase);                    // Add Code ปล่อยว่างตามที่ต้องการ
-        setCell(ws, rowIndex, 5, row.productName || '', textBase); // Ref Name = Product name
-        setCell(ws, rowIndex, 6, type, boldBase);
+        setCell(ws, rowIndex, col(0), DAY_TH[d.getDay()], st.normalBold);
+        setCell(ws, rowIndex, col(1), dayDateText(rowData.date), st.normalBold);
+        setCell(ws, rowIndex, col(2), roundText(rowData), boldBase);        // R... = คันรถ
+        setCell(ws, rowIndex, col(3), rowData.productName || '', textBase); // รวม Product name เดียวกันในคันแล้ว
+        setCell(ws, rowIndex, col(4), '', fillBase);                        // Add Code ปล่อยว่างตามที่ต้องการ
+        setCell(ws, rowIndex, col(5), rowData.productName || '', textBase); // Ref Name = Product name
+        setCell(ws, rowIndex, col(6), type, boldBase);
         // Original Plan Q'ty ต้องเป็นตัวเลขจริงเท่านั้น ไม่ใช่สูตร/ข้อความ เพื่อให้ SUMIF/JB/PP คำนวณต่อได้ถูกต้อง
-        setCell(ws, rowIndex, 7, originalQty, st.blueNum, 'n');     // Original Plan Q'ty
-        for(let c=8; c<=12; c++) setCell(ws, rowIndex, c, '', fillBase);
+        setCell(ws, rowIndex, col(7), originalQty, st.blueNum, 'n');         // Original Plan Q'ty
+        for(let c=8; c<=12; c++) setCell(ws, rowIndex, col(c), '', fillBase);
         // Actual Ship > Pallet ใส่สูตร = Original Plan Q'ty ของแถวนั้น เพื่อให้ลากลงต่อได้
-        setFormula(ws, rowIndex, 13, `H${rowIndex + 1}`, st.redNum);
-        setCell(ws, rowIndex, 14, '', st.normalBold);
-        setCell(ws, rowIndex, 15, '', st.normalBold);
-        setCell(ws, rowIndex, 16, '', st.normalBold);
+        setFormula(ws, rowIndex, col(13), `${colName(7)}${rowIndex + 1}`, st.redNum);
+        setCell(ws, rowIndex, col(14), '', st.normalBold);
+        setCell(ws, rowIndex, col(15), '', st.normalBold);
+        setCell(ws, rowIndex, col(16), '', st.normalBold);
         rowIndex++;
       }
 
       // Merge Round ตามคันรถ R... กรณีในคันเดียวกันมีหลาย Product
       for(const range of truckRanges.values()){
         if(range.end > range.start){
-          ws['!merges'].push({s:{r:range.start,c:2}, e:{r:range.end,c:2}});
+          ws['!merges'].push({s:{r:range.start,c:col(2)}, e:{r:range.end,c:col(2)}});
         }
       }
 
@@ -2454,29 +2467,30 @@
         const excelStart = r1 + 1;
         const excelEnd = r2 + 1;
         if(r2 > r1){
-          ws['!merges'].push({s:{r:r1,c:0}, e:{r:r2,c:0}});
-          ws['!merges'].push({s:{r:r1,c:1}, e:{r:r2,c:1}});
+          ws['!merges'].push({s:{r:r1,c:col(0)}, e:{r:r2,c:col(0)}});
+          ws['!merges'].push({s:{r:r1,c:col(1)}, e:{r:r2,c:col(1)}});
           // JB, PP และ Total Ctn merge ตามวัน
-          for(const c of [14,15,16]) ws['!merges'].push({s:{r:r1,c}, e:{r:r2,c}});
+          for(const c of [14,15,16]) ws['!merges'].push({s:{r:r1,c:col(c)}, e:{r:r2,c:col(c)}});
         }
-        // JB / PP = SUMIF ตาม Type ของวันนั้น โดยอิงจากคอลัมน์ Actual Ship > Pallet (คอลัมน์ N)
-        setFormula(ws, r1, 14, `SUMIF($G${excelStart}:$G${excelEnd},"JB",$N${excelStart}:$N${excelEnd})`, st.normalBold);
-        setFormula(ws, r1, 15, `SUMIF($G${excelStart}:$G${excelEnd},"PP",$N${excelStart}:$N${excelEnd})`, st.normalBold);
-        setFormula(ws, r1, 16, `O${excelStart}+P${excelStart}`, st.normalBold);
+        // JB / PP = SUMIF ตาม Type ของวันนั้น โดยอิงจากคอลัมน์ Actual Ship > Pallet
+        setFormula(ws, r1, col(14), `SUMIF($${colName(6)}${excelStart}:$${colName(6)}${excelEnd},"JB",$${colName(13)}${excelStart}:$${colName(13)}${excelEnd})`, st.normalBold);
+        setFormula(ws, r1, col(15), `SUMIF($${colName(6)}${excelStart}:$${colName(6)}${excelEnd},"PP",$${colName(13)}${excelStart}:$${colName(13)}${excelEnd})`, st.normalBold);
+        setFormula(ws, r1, col(16), `${colName(14)}${excelStart}+${colName(15)}${excelStart}`, st.normalBold);
       }
 
       const totalRow = rowIndex + 1;
-      setCell(ws, totalRow, 6, 'Total', st.total);
-      setFormula(ws, totalRow, 7, `SUM(H${bodyStart+1}:H${rowIndex})`, st.total);
-      setFormula(ws, totalRow, 13, `SUM(N${bodyStart+1}:N${rowIndex})`, st.total);
-      setFormula(ws, totalRow, 14, `SUM(O${bodyStart+1}:O${rowIndex})`, st.total);
-      setFormula(ws, totalRow, 15, `SUM(P${bodyStart+1}:P${rowIndex})`, st.total);
-      setFormula(ws, totalRow, 16, `SUM(Q${bodyStart+1}:Q${rowIndex})`, st.total);
-      applyRangeStyle(ws, 0, 0, totalRow, colCount - 1, st.blank);
-      ws['!autofilter'] = { ref: `A3:Q${Math.max(rowIndex, bodyStart + 1)}` };
-      ws['!freeze'] = { xSplit: 0, ySplit: 3 };
+      setCell(ws, totalRow, col(6), 'Total', st.total);
+      setFormula(ws, totalRow, col(7), `SUM(${colName(7)}${bodyStart + 1}:${colName(7)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(13), `SUM(${colName(13)}${bodyStart + 1}:${colName(13)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(14), `SUM(${colName(14)}${bodyStart + 1}:${colName(14)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(15), `SUM(${colName(15)}${bodyStart + 1}:${colName(15)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(16), `SUM(${colName(16)}${bodyStart + 1}:${colName(16)}${rowIndex})`, st.total);
+      applyRangeStyle(ws, startRow, startCol, totalRow, absoluteTableEndCol, st.blank);
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:headerRow,c:startCol}, e:{r:Math.max(rowIndex, bodyStart + 1), c:absoluteTableEndCol}}) };
+      ws['!freeze'] = { xSplit: 0, ySplit: bodyStart };
       return ws;
     }
+
 
     function monthDateLabel(year, monthIndex, day){
       return `${day} ${MONTH_SHORT_EN[monthIndex]} ${String(year).slice(2)}`;
