@@ -685,6 +685,8 @@
         <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
         <button id="importBtn" class="light">นำเข้า CSV</button>
         <button id="exportBtn" class="light">ส่งออก CSV</button>
+        <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
+        <button id="exportBalanceExcelBtn" class="light">Export Excel Balance</button>
       </div>
     </div>
   </header>
@@ -768,6 +770,7 @@
     </div>
   </dialog>
 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <script type="module">
     /*
       วิธีใช้ Firebase:
@@ -2079,6 +2082,491 @@
       URL.revokeObjectURL(a.href);
     }
 
+
+    function ensureExcelLibrary(){
+      if(!window.XLSX){
+        alert("ยังโหลดระบบสร้าง Excel ไม่เสร็จ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+        return false;
+      }
+      return true;
+    }
+
+    const MONTH_SHORT_EN = ["Jan","Feb","Mar","APR","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const MONTH_FULL_TH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+    const DAY_TH = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+    const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+
+    function excelSerialFromDate(date){
+      const d = new Date(date);
+      return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - EXCEL_EPOCH) / 86400000);
+    }
+
+    function jsDateFromISO(iso){
+      const [y,m,d] = String(iso || '').split('-').map(Number);
+      return new Date(y || 1970, (m || 1) - 1, d || 1);
+    }
+
+    function monthDays(year, monthIndex){
+      return new Date(year, monthIndex + 1, 0).getDate();
+    }
+
+    function sheetNameSafe(name){
+      return String(name).replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31);
+    }
+
+    function cellAddr(row, col){
+      return XLSX.utils.encode_cell({ r: row, c: col });
+    }
+
+    function setCell(ws, row, col, value, style=null, type=null){
+      const addr = cellAddr(row, col);
+      const cell = ws[addr] || {};
+      cell.v = value;
+      if(type) cell.t = type;
+      if(style) cell.s = style;
+      ws[addr] = cell;
+      return cell;
+    }
+
+    function setFormula(ws, row, col, formula, style=null){
+      const addr = cellAddr(row, col);
+      ws[addr] = { t:'n', f:formula };
+      if(style) ws[addr].s = style;
+    }
+
+    function applyRangeStyle(ws, r1, c1, r2, c2, style){
+      for(let r=r1; r<=r2; r++){
+        for(let c=c1; c<=c2; c++){
+          const addr = cellAddr(r,c);
+          ws[addr] = ws[addr] || { t:'s', v:'' };
+          ws[addr].s = { ...(ws[addr].s || {}), ...style };
+        }
+      }
+    }
+
+    function downloadWorkbook(wb, filename){
+      XLSX.writeFile(wb, filename, { bookType:'xlsx', cellStyles:true });
+    }
+
+    function excelBaseStyles(){
+      const border = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'thin', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const mediumBorder = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'medium', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const center = { horizontal:'center', vertical:'center', wrapText:true };
+      const left = { horizontal:'left', vertical:'center', wrapText:true };
+      return {
+        border,
+        title:{ font:{bold:true, sz:14}, alignment:center, fill:{fgColor:{rgb:'FFFFFF'}}, border },
+        header:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border:mediumBorder },
+        headerGreen:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'E2F0D9'}}, border:mediumBorder },
+        normal:{ font:{sz:10}, alignment:center, border },
+        normalBold:{ font:{bold:true, sz:10}, alignment:center, border },
+        text:{ font:{sz:10}, alignment:left, border },
+        textBold:{ font:{bold:true, sz:10}, alignment:left, border },
+        integer:{ font:{sz:10}, alignment:center, numFmt:'#,##0', border },
+        number:{ font:{sz:10}, alignment:center, numFmt:'#,##0.0', border },
+        stp:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        stpText:{ font:{sz:10}, alignment:left, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        stpBold:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        ptr:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FFFF00'}}, border },
+        ptrText:{ font:{sz:10}, alignment:left, fill:{fgColor:{rgb:'FFFF00'}}, border },
+        ptrBold:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFFF00'}}, border },
+        blueNum:{ font:{bold:true, sz:10, color:{rgb:'0000FF'}}, alignment:center, numFmt:'#,##0', border },
+        redNum:{ font:{bold:true, sz:10, color:{rgb:'FF0000'}}, alignment:center, numFmt:'#,##0', border },
+        blueText:{ font:{bold:true, sz:10, color:{rgb:'0000FF'}}, alignment:left, border },
+        greenText:{ font:{bold:true, sz:10, color:{rgb:'00B050'}}, alignment:left, border },
+        redText:{ font:{bold:true, sz:10, color:{rgb:'FF0000'}}, alignment:left, border },
+        balanceDate:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        redFill:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FF0000'}}, border },
+        total:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border },
+        blank:{ border }
+      };
+    }
+
+    function parseRoundInfo(row, fallbackPage='STP'){
+      // กรองรอบรถให้ชัดเจนก่อนรวม Weekly:
+      // R...  = STP, R...A = PTR
+      // รองรับข้อมูลเดิมที่อาจกรอกเป็น 1, R1, 1A หรือ R1A เพื่อไม่ให้ STP/PTR ปนกัน
+      const rawTrip = String(row?.tripNo ?? '').trim().toUpperCase().replace(/\s+/g, '');
+      const basePage = String(row?.page || fallbackPage || 'STP').toUpperCase() === 'PTR' ? 'PTR' : 'STP';
+      const matched = rawTrip.match(/^R?(\d+)(A)?$/);
+      const tripNo = matched ? matched[1] : rawTrip.replace(/^R/i, '').replace(/A$/i, '');
+      const page = matched?.[2] === 'A' ? 'PTR' : basePage;
+      const round = tripNo ? (page === 'PTR' ? `R${tripNo}A` : `R${tripNo}`) : '';
+      return { page, tripNo, round };
+    }
+
+    function normalizeRowForWeeklyExport(row, page, date){
+      const withContext = { ...row, page, date };
+      const round = parseRoundInfo(withContext, page);
+      return {
+        ...withContext,
+        originalPage: page,
+        page: round.page,
+        tripNo: round.tripNo,
+        exportRound: round.round
+      };
+    }
+
+    function rowsFromSnapshot(raw, page, year){
+      const out = [];
+      for(const [date, dateData] of Object.entries(raw || {})){
+        if(!date.startsWith(`${year}-`)) continue;
+        const rowsObj = dateData?.rows || dateData || {};
+        const rows = sortRows(rowsObj).map(row => normalizeRowForWeeklyExport(row, page, date));
+        out.push(...rows);
+      }
+      return out;
+    }
+
+    async function getRowsForExportYear(year){
+      const pages = ["STP", "PTR"];
+      const all = [];
+      for(const page of pages){
+        const snap = await get(ref(db, `${pageRoot(page)}/plans`));
+        all.push(...rowsFromSnapshot(snap.val() || {}, page, year));
+      }
+      // fallback สำหรับข้อมูล STP เก่าที่เคยอยู่ path knsTransport/plans/yyyy-mm-dd/rows
+      const legacySnap = await get(ref(db, `knsTransport/plans`));
+      const legacyRows = rowsFromSnapshot(legacySnap.val() || {}, "STP", year).map(row => ({ ...row, legacy:true }));
+      const known = new Set(all.map(r => `${r.page}|${r.date}|${r.tripNo}|${r.productName}|${r.batchNo}|${r.tankCode}|${r.bags}|${r.kg}`));
+      for(const row of legacyRows){
+        const key = `${row.page}|${row.date}|${row.tripNo}|${row.productName}|${row.batchNo}|${row.tankCode}|${row.bags}|${row.kg}`;
+        if(!known.has(key)) all.push(row);
+      }
+      return all.sort((a,b) => {
+        const dateDiff = String(a.date).localeCompare(String(b.date));
+        if(dateDiff) return dateDiff;
+        const pageOrder = (a.page === 'STP' ? 0 : 1) - (b.page === 'STP' ? 0 : 1);
+        if(pageOrder) return pageOrder;
+        const tripDiff = num(a.tripNo) - num(b.tripNo);
+        if(tripDiff) return tripDiff;
+        return String(a.productName || '').localeCompare(String(b.productName || ''), 'th');
+      });
+    }
+
+    function roundText(row){
+      const parsed = parseRoundInfo(row, row.page);
+      return row.exportRound || parsed.round;
+    }
+
+    function productType(row){
+      return normalizePackType(row.packType) || calcPackType(row.bags, row.kg) || '';
+    }
+
+    function originalPlanQty(row){
+      // Weekly: Original Plan Q'ty ใช้จำนวน Q'ty จริงในแผน (Quantity bag)
+      // ถ้าแถวเก่าบางรายการไม่มี bags ให้ fallback เป็น pallets เพื่อไม่ให้ข้อมูลหาย
+      const bagsValue = num(row.bags);
+      if(bagsValue) return bagsValue;
+      return num(row.pallets);
+    }
+
+    function groupRowsForWeekly(monthRows){
+      // จัดกลุ่มตาม "วัน + หน้า STP/PTR + คันรถ R... + Product name + Type"
+      // ถ้าในคันเดียวกันมี Product name เดียวกันหลายแถว ให้รวมเป็นหัวเดียว และรวม Original Plan Q'ty
+      const grouped = new Map();
+      for(const row of monthRows){
+        const type = productType(row);
+        const key = [row.date, row.page, row.tripNo, normalizedProduct(row.productName), type].join('|');
+        if(!grouped.has(key)){
+          grouped.set(key, {
+            ...row,
+            productName: String(row.productName || '').trim(),
+            type,
+            originalQty:0,
+            bags:0,
+            kg:0,
+            pallets:0,
+            batchNos:new Set(),
+            tankCodes:new Set(),
+            sourceRows:0
+          });
+        }
+        const item = grouped.get(key);
+        item.originalQty += originalPlanQty(row);
+        item.bags += num(row.bags);
+        item.kg += num(row.kg);
+        item.pallets += num(row.pallets);
+        if(String(row.batchNo || '').trim()) item.batchNos.add(String(row.batchNo).trim());
+        if(String(row.tankCode || '').trim()) item.tankCodes.add(String(row.tankCode).trim());
+        item.sourceRows += 1;
+      }
+      return Array.from(grouped.values()).map(item => ({
+        ...item,
+        batchNo:[...item.batchNos].join('\n'),
+        tankCode:[...item.tankCodes].join('\n')
+      })).sort((a,b) => {
+        const dateDiff = String(a.date).localeCompare(String(b.date));
+        if(dateDiff) return dateDiff;
+        const pageOrder = (a.page === 'STP' ? 0 : 1) - (b.page === 'STP' ? 0 : 1);
+        if(pageOrder) return pageOrder;
+        const tripDiff = num(a.tripNo) - num(b.tripNo);
+        if(tripDiff) return tripDiff;
+        return String(a.productName || '').localeCompare(String(b.productName || ''), 'th');
+      });
+    }
+
+    function dayDateText(date){
+      const d = jsDateFromISO(date);
+      return `${Number(String(date).slice(8,10))}-${MONTH_SHORT_EN[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
+    }
+
+    function createWeeklySheet(year, monthIndex, monthRows){
+      const st = excelBaseStyles();
+      const dataRows = groupRowsForWeekly(monthRows.filter(row => Number(String(row.date).slice(5,7)) === monthIndex + 1));
+      // โครงหัวตารางตามไฟล์อ้างอิง: แถว 1 = หัวกลุ่ม / แถว 2 = หัวย่อย / แถว 3 = filter/header หลัก
+      const bodyStart = 3; // แถวข้อมูลเริ่มที่แถว 4 ใน Excel
+      const colCount = 17; // A:Q
+      const minRows = 40;
+      const totalRows = Math.max(minRows, dataRows.length + bodyStart + 8);
+      const aoa = Array.from({length: totalRows}, () => Array(colCount).fill(''));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [
+        {wch:13},{wch:13},{wch:10},{wch:34},{wch:18},{wch:34},{wch:7},
+        {wch:13},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:13},
+        {wch:9},{wch:9},{wch:12}
+      ];
+      ws['!rows'] = Array.from({length: totalRows}, (_,i) => ({ hpt: i < 2 ? 24 : 20 }));
+      ws['!merges'] = [];
+
+      const groupHeader = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, sz:9, color:{rgb:'0000FF'}},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true, textRotation:90},
+        fill:{fgColor:{rgb:'FFFFFF'}}
+      };
+      const groupHeaderGreen = {
+        ...st.headerGreen,
+        font:{...(st.headerGreen.font || {}), bold:true, sz:9},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true, textRotation:90},
+        fill:{fgColor:{rgb:'92D050'}}
+      };
+      const subHeaderBlue = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, color:{rgb:'0000FF'}},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true}
+      };
+      const subHeaderGreen = {
+        ...st.headerGreen,
+        font:{...(st.headerGreen.font || {}), bold:true},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true},
+        fill:{fgColor:{rgb:'92D050'}}
+      };
+      const headerWhite = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, sz:12},
+        fill:{fgColor:{rgb:'D9D9D9'}}
+      };
+      const typeHeader = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, sz:9},
+        fill:{fgColor:{rgb:'D9D9D9'}}
+      };
+
+      // แถวบนสุดเหมือนภาพอ้างอิง
+      setCell(ws, 0, 0, `ตารางสรุปนำเข้า (Inbound) ประจำเดือน ${MONTH_FULL_TH[monthIndex]}`, st.title);
+      ws['!merges'].push({s:{r:0,c:0}, e:{r:0,c:6}});
+
+      setCell(ws, 0, 7, "Original\nPlan\nQ'ty", groupHeader);
+      setCell(ws, 0, 8, 'Revise\n1', groupHeader);
+      setCell(ws, 0, 9, 'Revise\n2', groupHeader);
+      setCell(ws, 0, 10, 'Revise\n3', groupHeader);
+      setCell(ws, 0, 11, 'Revise\n4', groupHeader);
+      setCell(ws, 0, 12, 'Revise\n5', groupHeader);
+      setCell(ws, 0, 13, 'Actual\nShip', groupHeaderGreen);
+      ws['!merges'].push({s:{r:0,c:13}, e:{r:0,c:15}});
+      setCell(ws, 0, 16, 'Total Ctn', headerWhite);
+      ws['!merges'].push({s:{r:0,c:16}, e:{r:2,c:16}});
+
+      // หัวย่อย Pallet / JB / PP
+      for(let c=7; c<=13; c++) setCell(ws, 1, c, 'Pallet', c === 13 ? subHeaderGreen : subHeaderBlue);
+      setCell(ws, 1, 14, 'JB', subHeaderGreen);
+      setCell(ws, 1, 15, 'PP', subHeaderGreen);
+
+      // หัวหลักแถว filter
+      const headers = ['Day','Date','Round','Products','Add Code','Ref Name','Ty'];
+      headers.forEach((h, i) => setCell(ws, 2, i, h, i === 6 ? typeHeader : headerWhite));
+      for(let c=7; c<=15; c++) setCell(ws, 2, c, '', c >= 13 ? subHeaderGreen : subHeaderBlue);
+
+      if(!dataRows.length){
+        applyRangeStyle(ws, 0, 0, 8, colCount - 1, st.blank);
+        return ws;
+      }
+
+      const dateRanges = new Map();
+      const truckRanges = new Map();
+      let rowIndex = bodyStart;
+
+      for(const row of dataRows){
+        const d = jsDateFromISO(row.date);
+        const type = row.type || productType(row);
+        const fillBase = row.page === 'PTR' ? st.ptr : st.stp;
+        const textBase = row.page === 'PTR' ? st.ptrText : st.stpText;
+        const boldBase = row.page === 'PTR' ? st.ptrBold : st.stpBold;
+        const originalQty = num(row.originalQty);
+        const dateKey = row.date;
+        const truckKey = [row.date, row.page, row.tripNo].join('|');
+
+        if(!dateRanges.has(dateKey)) dateRanges.set(dateKey, {start:rowIndex, end:rowIndex});
+        dateRanges.get(dateKey).end = rowIndex;
+        if(!truckRanges.has(truckKey)) truckRanges.set(truckKey, {start:rowIndex, end:rowIndex, style:boldBase});
+        truckRanges.get(truckKey).end = rowIndex;
+
+        setCell(ws, rowIndex, 0, DAY_TH[d.getDay()], st.normalBold);
+        setCell(ws, rowIndex, 1, dayDateText(row.date), st.normalBold);
+        setCell(ws, rowIndex, 2, roundText(row), boldBase);        // R... = คันรถ
+        setCell(ws, rowIndex, 3, row.productName || '', textBase); // รวม Product name เดียวกันในคันแล้ว
+        setCell(ws, rowIndex, 4, '', fillBase);                    // Add Code ปล่อยว่างตามที่ต้องการ
+        setCell(ws, rowIndex, 5, row.productName || '', textBase); // Ref Name = Product name
+        setCell(ws, rowIndex, 6, type, boldBase);
+        // Original Plan Q'ty ต้องเป็นตัวเลขจริงเท่านั้น ไม่ใช่สูตร/ข้อความ เพื่อให้ SUMIF/JB/PP คำนวณต่อได้ถูกต้อง
+        setCell(ws, rowIndex, 7, originalQty, st.blueNum, 'n');     // Original Plan Q'ty
+        for(let c=8; c<=12; c++) setCell(ws, rowIndex, c, '', fillBase);
+        // Actual Ship > Pallet ใส่สูตร = Original Plan Q'ty ของแถวนั้น เพื่อให้ลากลงต่อได้
+        setFormula(ws, rowIndex, 13, `H${rowIndex + 1}`, st.redNum);
+        setCell(ws, rowIndex, 14, '', st.normalBold);
+        setCell(ws, rowIndex, 15, '', st.normalBold);
+        setCell(ws, rowIndex, 16, '', st.normalBold);
+        rowIndex++;
+      }
+
+      // Merge Round ตามคันรถ R... กรณีในคันเดียวกันมีหลาย Product
+      for(const range of truckRanges.values()){
+        if(range.end > range.start){
+          ws['!merges'].push({s:{r:range.start,c:2}, e:{r:range.end,c:2}});
+        }
+      }
+
+      // Merge Day / Date / JB / PP / Total Ctn ตามวัน และใส่สูตรรวมรายวัน
+      for(const [dateKey, range] of dateRanges.entries()){
+        const r1 = range.start;
+        const r2 = range.end;
+        const excelStart = r1 + 1;
+        const excelEnd = r2 + 1;
+        if(r2 > r1){
+          ws['!merges'].push({s:{r:r1,c:0}, e:{r:r2,c:0}});
+          ws['!merges'].push({s:{r:r1,c:1}, e:{r:r2,c:1}});
+          // JB, PP และ Total Ctn merge ตามวัน
+          for(const c of [14,15,16]) ws['!merges'].push({s:{r:r1,c}, e:{r:r2,c}});
+        }
+        // JB / PP = SUMIF ตาม Type ของวันนั้น โดยอิงจากคอลัมน์ Actual Ship > Pallet (คอลัมน์ N)
+        setFormula(ws, r1, 14, `SUMIF($G${excelStart}:$G${excelEnd},"JB",$N${excelStart}:$N${excelEnd})`, st.normalBold);
+        setFormula(ws, r1, 15, `SUMIF($G${excelStart}:$G${excelEnd},"PP",$N${excelStart}:$N${excelEnd})`, st.normalBold);
+        setFormula(ws, r1, 16, `O${excelStart}+P${excelStart}`, st.normalBold);
+      }
+
+      const totalRow = rowIndex + 1;
+      setCell(ws, totalRow, 6, 'Total', st.total);
+      setFormula(ws, totalRow, 7, `SUM(H${bodyStart+1}:H${rowIndex})`, st.total);
+      setFormula(ws, totalRow, 13, `SUM(N${bodyStart+1}:N${rowIndex})`, st.total);
+      setFormula(ws, totalRow, 14, `SUM(O${bodyStart+1}:O${rowIndex})`, st.total);
+      setFormula(ws, totalRow, 15, `SUM(P${bodyStart+1}:P${rowIndex})`, st.total);
+      setFormula(ws, totalRow, 16, `SUM(Q${bodyStart+1}:Q${rowIndex})`, st.total);
+      applyRangeStyle(ws, 0, 0, totalRow, colCount - 1, st.blank);
+      ws['!autofilter'] = { ref: `A3:Q${Math.max(rowIndex, bodyStart + 1)}` };
+      ws['!freeze'] = { xSplit: 0, ySplit: 3 };
+      return ws;
+    }
+
+    function monthDateLabel(year, monthIndex, day){
+      return `${day} ${MONTH_SHORT_EN[monthIndex]} ${String(year).slice(2)}`;
+    }
+
+    function createBalanceSheet(year, monthIndex, monthRows){
+      const st = excelBaseStyles();
+      const days = monthDays(year, monthIndex);
+      const aoa = Array.from({length: days + 10}, () => Array(6).fill(''));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{wch:3},{wch:16},{wch:15},{wch:15},{wch:15},{wch:18}];
+      ws['!rows'] = Array.from({length: days + 10}, () => ({hpt:22}));
+      ws['!merges'] = [{s:{r:0,c:1}, e:{r:0,c:5}}];
+      setCell(ws, 0, 1, `Balance of product at KNS KORAT ${year}`, st.title);
+      ['No.','Inbound (Ton.)','Outbound (Ton.)','Diff (Ton.)','Remark'].forEach((h, i) => setCell(ws, 1, 1+i, h, st.header));
+
+      const byDate = new Map();
+      for(const row of monthRows){
+        const key = row.date;
+        byDate.set(key, (byDate.get(key) || 0) + (num(row.kg) / 1000));
+      }
+
+      for(let day=1; day<=days; day++){
+        const iso = `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const r = day + 1;
+        const isWeeklyLine = day % 7 === 0;
+        setCell(ws, r, 1, monthDateLabel(year, monthIndex, day), st.balanceDate);
+        if(isWeeklyLine){
+          for(let c=2; c<=5; c++) setCell(ws, r, c, '', st.redFill);
+        }else{
+          const inbound = byDate.get(iso);
+          setCell(ws, r, 2, inbound ? Number(inbound.toFixed(1)) : '', st.number);
+          setCell(ws, r, 3, '', st.number);
+          setFormula(ws, r, 4, `IF(OR(C${r+1}<>",",D${r+1}<>","),C${r+1}-D${r+1},"")`.replace(/<>","/g,'<>""'), st.number);
+          setCell(ws, r, 5, '', st.text);
+        }
+      }
+
+      const totalRow = days + 2;
+      const avgRow = days + 3;
+      setCell(ws, totalRow, 1, 'Total', st.total);
+      setFormula(ws, totalRow, 2, `SUM(C3:C${days+2})`, {...st.total, font:{...(st.total.font||{}), color:{rgb:'0000FF'}}});
+      setFormula(ws, totalRow, 3, `SUM(D3:D${days+2})`, {...st.total, font:{...(st.total.font||{}), color:{rgb:'00B050'}}});
+      setFormula(ws, totalRow, 4, `SUM(E3:E${days+2})`, {...st.total, font:{...(st.total.font||{}), color:{rgb:'FF0000'}}});
+      setCell(ws, totalRow, 5, '', st.total);
+
+      setCell(ws, avgRow, 1, 'Average Ton. / Day', st.normalBold);
+      setFormula(ws, avgRow, 2, `C${totalRow+1}/COUNT(C3:C${days+2})`, st.blueNum);
+      setFormula(ws, avgRow, 3, `D${totalRow+1}/COUNT(D3:D${days+2})`, {...st.normalBold, font:{bold:true, sz:10, color:{rgb:'00B050'}}, numFmt:'#,##0.0'});
+      setFormula(ws, avgRow, 4, `E${totalRow+1}/COUNT(E3:E${days+2})`, {...st.normalBold, font:{bold:true, sz:10, color:{rgb:'FF0000'}}, numFmt:'#,##0.0'});
+      setCell(ws, avgRow, 5, '', st.normal);
+
+      const noteRow = avgRow + 2;
+      setCell(ws, noteRow, 1, 'อักษรสีน้ำเงิน คือ น้ำหนักของสินค้าที่รับเข้าโกดัง', st.blueText);
+      ws['!merges'].push({s:{r:noteRow,c:1}, e:{r:noteRow,c:5}});
+      setCell(ws, noteRow+1, 1, 'อักษรสีเขียว คือ น้ำหนักของสินค้าที่ส่งออกจากโกดัง', st.greenText);
+      ws['!merges'].push({s:{r:noteRow+1,c:1}, e:{r:noteRow+1,c:5}});
+      setCell(ws, noteRow+2, 1, 'อักษรสีแดง คือ น้ำหนักของสินค้าที่ถูกจัดเก็บในโกดัง', st.redText);
+      ws['!merges'].push({s:{r:noteRow+2,c:1}, e:{r:noteRow+2,c:5}});
+
+      applyRangeStyle(ws, 0, 1, avgRow, 5, st.blank);
+      return ws;
+    }
+
+    async function exportWeeklyInboundExcel(){
+      if(!ensureExcelLibrary()) return;
+      const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const rows = await getRowsForExportYear(year);
+      const wb = XLSX.utils.book_new();
+      for(let month=0; month<12; month++){
+        const monthRows = rows.filter(row => Number(String(row.date).slice(5,7)) === month + 1);
+        const ws = createWeeklySheet(year, month, monthRows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`Inbound ${MONTH_SHORT_EN[month]} ${year}`));
+      }
+      downloadWorkbook(wb, `Weekly Inbound ${year}.xlsx`);
+    }
+
+    async function exportBalanceInboundExcel(){
+      if(!ensureExcelLibrary()) return;
+      const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const rows = await getRowsForExportYear(year);
+      const wb = XLSX.utils.book_new();
+      for(let month=0; month<12; month++){
+        const monthRows = rows.filter(row => Number(String(row.date).slice(5,7)) === month + 1);
+        const ws = createBalanceSheet(year, month, monthRows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`Balance product ${year} ${MONTH_SHORT_EN[month]}`));
+      }
+      downloadWorkbook(wb, `Balance Inbound ${year}.xlsx`);
+    }
+
     function parseCSVLine(line){
       const out = [];
       let cur = "", quote = false;
@@ -2304,6 +2792,8 @@
     $("exportBtn").addEventListener("click", () => {
       downloadText(`KNS-${currentPage}-${currentDate}.csv`, toCSV(rowsCache));
     });
+    $("exportWeeklyExcelBtn").addEventListener("click", exportWeeklyInboundExcel);
+    $("exportBalanceExcelBtn").addEventListener("click", exportBalanceInboundExcel);
     $("copyYesterdayBtn").addEventListener("click", copyYesterday);
 
     pageTabs.forEach(btn => {
