@@ -684,7 +684,8 @@
         <button id="addRowBtn" class="good">+ เพิ่มคันท้ายสุด</button>
         <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
         <button id="importBtn" class="light">นำเข้า CSV</button>
-        <button id="exportBtn" class="light">ส่งออก CSV</button>
+        <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
+        <button id="exportPlanExcelBtn" class="light">ส่งออก Excel ตามสีหน้าเว็บ</button>
         <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
         <button id="exportBalanceExcelBtn" class="light">Export Excel Balance</button>
       </div>
@@ -2018,54 +2019,44 @@
       return fallbackRemark || "";
     }
 
-    function toCSV(rows){
-      const head = ["No","Product name","Quantity bag","Quantity Kg","Quantity pallet","PP/JB","Remark"];
-      const grouped = new Map();
-
-      for(const r of rows){
-        const tripNo = String(r.tripNo ?? "").trim();
-        const productName = String(r.productName ?? "").trim();
-        if(!tripNo && !productName) continue;
-
-        // แยกข้อมูลแต่ละ No โดยสิ้นเชิง และยุบเฉพาะ Product name ที่ซ้ำกันใน No เดียวกัน
-        const key = `${tripNo}||${productName}`;
-        if(!grouped.has(key)){
-          grouped.set(key, {
-            tripNo,
-            productName,
-            bags: 0,
-            kg: 0,
-            pallets: 0,
-            fallbackPackType: "",
-            fallbackRemark: ""
-          });
-        }
-
-        const item = grouped.get(key);
-        item.bags += num(r.bags);
-        item.kg += num(r.kg);
-        item.pallets += num(r.pallets);
-        if(!item.fallbackPackType && r.packType) item.fallbackPackType = normalizePackType(r.packType);
-        if(!item.fallbackRemark && r.remark) item.fallbackRemark = r.remark;
-      }
-
-      const lines = Array.from(grouped.values())
+    function rowsForPlanExport(rows){
+      return [...rows]
+        .filter(r => fields.some(field => String(r?.[field] ?? '').trim()))
         .sort((a,b) => {
           const tripDiff = num(a.tripNo) - num(b.tripNo);
           if(tripDiff) return tripDiff;
-          return a.productName.localeCompare(b.productName, 'th');
-        })
-        .map(item => [
-          `R${item.tripNo}`,
-          item.productName,
-          item.bags || "",
-          item.kg || "",
-          item.pallets || "",
-          calcPackType(item.bags, item.kg) || item.fallbackPackType || "",
-          item.fallbackRemark || ""
-        ].map(csvCell).join(","));
+          return rowOrderValue(a) - rowOrderValue(b);
+        });
+    }
 
-      return [head.join(","), ...lines].join("\n");
+    // CSV เก็บข้อมูลตามคอลัมน์ในภาพ ส่วนการ merge เซลล์ สี และเส้นกรอบ
+    // จะอยู่ในปุ่ม “ส่งออก Excel ตามสีหน้าเว็บ” เพราะไฟล์ CSV ไม่รองรับรูปแบบเหล่านั้น
+    function toCSV(rows){
+      const exportRows = rowsForPlanExport(rows);
+      const head = [
+        "Date","No.","Product name","Batch No.","Tank code",
+        "Quantity (bag)","Quantity (Kg)","Quantity","Remark","LOCATION"
+      ];
+      const lines = exportRows.map(r => [
+        formatDateThaiLike(currentDate),
+        String(r.tripNo ?? '').trim(),
+        String(r.productName ?? '').trim(),
+        String(r.batchNo ?? '').trim(),
+        String(r.tankCode ?? '').trim(),
+        num(r.bags) || '',
+        num(r.kg) || '',
+        num(r.pallets) || '',
+        String(r.remark ?? '').trim(),
+        getDisplayLocation(r)
+      ].map(csvCell).join(','));
+
+      const totalBags = exportRows.reduce((sum, r) => sum + num(r.bags), 0);
+      const totalKg = exportRows.reduce((sum, r) => sum + num(r.kg), 0);
+      const totalPallets = exportRows.reduce((sum, r) => sum + num(r.pallets), 0);
+      const totalLine = ["","","","","TOTAL",totalBags,totalKg,totalPallets,"",""]
+        .map(csvCell).join(',');
+
+      return [head.map(csvCell).join(','), ...lines, totalLine].join("\n");
     }
 
     function csvCell(v){
@@ -2082,6 +2073,222 @@
       URL.revokeObjectURL(a.href);
     }
 
+
+    function planExportStyles(page=currentPage){
+      const thin = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'thin', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const mediumBottom = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'medium', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const center = { horizontal:'center', vertical:'center', wrapText:true };
+      const left = { horizontal:'left', vertical:'center', wrapText:true };
+      const font = { name:'Tahoma', sz:10, color:{rgb:'000000'} };
+      const isPTR = String(page || '').toUpperCase() === 'PTR';
+
+      // ใช้ชุดสีเดียวกับหน้าเว็บจริง ไม่อิงสีจากภาพตัวอย่าง
+      const palette = isPTR ? {
+        pageBg:'F1FBF4',
+        title:'F1FBF4',
+        header:'D9F5DF',
+        locationHeader:'C9EFB8',
+        shadeA:'FFFFFF',
+        shadeB:'DFF3E6',
+        locationA:'FFFBE6',
+        locationB:'E6F6CF',
+        total:'D9F5DF',
+        exportRow:'FFF3A3'
+      } : {
+        pageBg:'F4F7F9',
+        title:'F4F7F9',
+        header:'BFE8F3',
+        locationHeader:'FFE600',
+        shadeA:'FFFFFF',
+        shadeB:'E9F6FB',
+        locationA:'FFFBE6',
+        locationB:'FFFBE6',
+        total:'BFE8F3',
+        exportRow:'FFF3A3'
+      };
+
+      const makeBorder = (groupStart=false, groupEnd=false) => ({
+        top:{style:groupStart ? 'medium' : 'thin', color:{rgb:'000000'}},
+        bottom:{style:groupEnd ? 'medium' : 'thin', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      });
+      const makeStyle = (fill, alignment=center, options={}) => ({
+        font:{
+          ...font,
+          ...(options.bold ? {bold:true} : {}),
+          ...(options.sz ? {sz:options.sz} : {}),
+          ...(options.fontColor ? {color:{rgb:options.fontColor}} : {})
+        },
+        alignment,
+        fill:{fgColor:{rgb:fill}},
+        border:options.border || thin,
+        ...(options.numFmt ? {numFmt:options.numFmt} : {})
+      });
+
+      return {
+        palette,
+        makeBorder,
+        makeCenter:(fill, options={}) => makeStyle(fill, center, options),
+        makeLeft:(fill, options={}) => makeStyle(fill, left, options),
+        title:makeStyle(palette.title, center, {bold:true, sz:12}),
+        header:makeStyle(palette.header, center, {bold:true, border:mediumBottom}),
+        locationHeader:makeStyle(palette.locationHeader, center, {bold:true, sz:11, border:mediumBottom}),
+        total:makeStyle(palette.total, center, {bold:true, numFmt:'#,##0.00'})
+      };
+    }
+
+    function setPlanCell(ws, row, col, value, style, type){
+      const addr = XLSX.utils.encode_cell({r:row, c:col});
+      ws[addr] = { v:value ?? '', t:type || (typeof value === 'number' ? 'n' : 's'), s:style };
+      return ws[addr];
+    }
+
+    function createPlanSheetLikeImage(rows){
+      const exportRows = rowsForPlanExport(rows);
+      const styles = planExportStyles(currentPage);
+      const palette = styles.palette;
+      const titleRow = 0;
+      const headerRow = 2;
+      const dataStart = 3;
+      const totalRow = dataStart + exportRows.length;
+      const ws = XLSX.utils.aoa_to_sheet(Array.from({length:Math.max(totalRow + 1, 5)}, () => Array(10).fill('')));
+      ws['!merges'] = [];
+
+      const dateObj = jsDateFromISO(currentDate);
+      const thaiYear = dateObj.getFullYear() + 543;
+      const monthName = MONTH_FULL_TH[dateObj.getMonth()] || '';
+      const title = `แผนการขนย้ายสินค้าไปคลังสินค้าด้านนอก (KNS)  เดือน${monthName} ${thaiYear}`;
+      setPlanCell(ws, titleRow, 0, title, styles.title);
+      ws['!merges'].push({s:{r:titleRow,c:0}, e:{r:titleRow,c:9}});
+      for(let c=1; c<10; c++) setPlanCell(ws, titleRow, c, '', styles.title);
+
+      const headers = [
+        'Date','No.','Product name','Batch No.','Tank code',
+        'Quantity (bag)','Quantity (Kg)','Quantity','Remark','LOCATION'
+      ];
+      headers.forEach((header, col) => setPlanCell(ws, headerRow, col, header, col === 9 ? styles.locationHeader : styles.header));
+
+      const tripRanges = new Map();
+      let previousShadeKey = null;
+      let shadeIndex = -1;
+
+      exportRows.forEach((row, index) => {
+        const sheetRow = dataStart + index;
+        const trip = String(row.tripNo ?? '').trim();
+        const previousRow = exportRows[index - 1];
+        const nextRow = exportRows[index + 1];
+        const isGroupStart = index === 0 || String(previousRow?.tripNo ?? '').trim() !== trip;
+        const isGroupEnd = index === exportRows.length - 1 || String(nextRow?.tripNo ?? '').trim() !== trip;
+        const border = styles.makeBorder(isGroupStart, isGroupEnd);
+
+        // หน้าเว็บสลับสีตาม Product name + Tank code ที่อยู่ติดกัน
+        const shadeKey = makeProductTankKey(row.productName, row.tankCode) || `__ROW_${index}`;
+        if(shadeKey !== previousShadeKey){
+          shadeIndex++;
+          previousShadeKey = shadeKey;
+        }
+        const shadeB = shadeIndex % 2 === 1;
+        let rowFill = shadeB ? palette.shadeB : palette.shadeA;
+        let locationFill = shadeB ? palette.locationB : palette.locationA;
+        let locationFontColor = '000000';
+
+        // ใช้สีสถานะและแถวส่งออกแบบเดียวกับหน้าเว็บ
+        const status = tripStatusForRow(row);
+        if(status === 'ok'){
+          rowFill = shadeB ? 'C8F0D6' : 'E3F8EA';
+          locationFill = 'DBF7E5';
+        }else if(status === 'mismatch'){
+          rowFill = shadeB ? 'FFD1DA' : 'FFE8EC';
+          locationFill = 'FFE1E7';
+        }else if(status === 'rollover'){
+          rowFill = shadeB ? 'FFE4A3' : 'FFF2C9';
+          locationFill = 'FFEDBD';
+        }
+        if(hasExportLocation(row)){
+          rowFill = palette.exportRow;
+          locationFill = palette.exportRow;
+          locationFontColor = 'D92D20';
+        }
+
+        const values = [
+          formatDateThaiLike(currentDate), trip, String(row.productName ?? '').trim(),
+          String(row.batchNo ?? '').trim(), String(row.tankCode ?? '').trim(),
+          num(row.bags) || '', num(row.kg) || '', num(row.pallets) || '',
+          String(row.remark ?? '').trim(), getDisplayLocation(row)
+        ];
+
+        values.forEach((value, col) => {
+          const isLocation = col === 9;
+          const fill = isLocation ? locationFill : rowFill;
+          const isTextLeft = col === 2 || col === 8 || col === 9;
+          const options = {
+            border,
+            ...(isLocation && locationFontColor !== '000000' ? {fontColor:locationFontColor, bold:true} : {})
+          };
+          if(col === 5 || col === 7) options.numFmt = '#,##0';
+          if(col === 6) options.numFmt = '#,##0.00';
+          const style = isTextLeft ? styles.makeLeft(fill, options) : styles.makeCenter(fill, options);
+          setPlanCell(ws, sheetRow, col, value, style, typeof value === 'number' ? 'n' : 's');
+        });
+
+        const key = trip || `__row_${index}`;
+        if(!tripRanges.has(key)) tripRanges.set(key, {start:sheetRow, end:sheetRow});
+        tripRanges.get(key).end = sheetRow;
+      });
+
+      if(exportRows.length){
+        ws['!merges'].push({s:{r:dataStart,c:0}, e:{r:dataStart + exportRows.length - 1,c:0}});
+        for(const range of tripRanges.values()){
+          if(range.end > range.start){
+            ws['!merges'].push({s:{r:range.start,c:1}, e:{r:range.end,c:1}});
+          }
+        }
+      }
+
+      const totalBags = exportRows.reduce((sum, row) => sum + num(row.bags), 0);
+      const totalKg = exportRows.reduce((sum, row) => sum + num(row.kg), 0);
+      const totalPallets = exportRows.reduce((sum, row) => sum + num(row.pallets), 0);
+      for(let c=0; c<10; c++) setPlanCell(ws, totalRow, c, '', styles.total);
+      setPlanCell(ws, totalRow, 4, 'TOTAL', styles.total);
+      setPlanCell(ws, totalRow, 5, totalBags, {...styles.total, numFmt:'#,##0'}, 'n');
+      setPlanCell(ws, totalRow, 6, totalKg, {...styles.total, numFmt:'#,##0.00'}, 'n');
+      setPlanCell(ws, totalRow, 7, totalPallets, {...styles.total, numFmt:'#,##0'}, 'n');
+
+      ws['!cols'] = [
+        {wch:13},{wch:8},{wch:34},{wch:22},{wch:22},
+        {wch:16},{wch:16},{wch:14},{wch:44},{wch:24}
+      ];
+      ws['!rows'] = Array.from({length:totalRow + 1}, (_, i) => ({hpt:i === titleRow ? 34 : (i === headerRow ? 28 : 25)}));
+      ws['!freeze'] = {xSplit:0, ySplit:dataStart};
+      ws['!autofilter'] = {ref:XLSX.utils.encode_range({s:{r:headerRow,c:0}, e:{r:Math.max(totalRow - 1, headerRow),c:9}})};
+      ws['!pageSetup'] = {orientation:'landscape', fitToWidth:1, fitToHeight:0, paperSize:9};
+      ws['!margins'] = {left:0.2, right:0.2, top:0.45, bottom:0.45, header:0.2, footer:0.2};
+      ws['!printArea'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:totalRow,c:9}});
+      return ws;
+    }
+
+    function exportPlanExcelLikeImage(){
+      if(!ensureExcelLibrary()) return;
+      if(!rowsCache.length){
+        alert('ยังไม่มีข้อมูลสำหรับส่งออก');
+        return;
+      }
+      const wb = XLSX.utils.book_new();
+      const ws = createPlanSheetLikeImage(rowsCache);
+      XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`${currentPage} ${currentDate}`));
+      downloadWorkbook(wb, `KNS-${currentPage}-${currentDate}-สีตามหน้าเว็บ.xlsx`);
+    }
 
     function ensureExcelLibrary(){
       if(!window.XLSX){
@@ -2804,8 +3011,13 @@
 
     $("addRowBtn").addEventListener("click", () => addRow());
     $("exportBtn").addEventListener("click", () => {
-      downloadText(`KNS-${currentPage}-${currentDate}.csv`, toCSV(rowsCache));
+      if(!rowsCache.length){
+        alert("ยังไม่มีข้อมูลสำหรับส่งออก");
+        return;
+      }
+      downloadText(`KNS-${currentPage}-${currentDate}-ตามแบบ.csv`, toCSV(rowsCache));
     });
+    $("exportPlanExcelBtn").addEventListener("click", exportPlanExcelLikeImage);
     $("exportWeeklyExcelBtn").addEventListener("click", exportWeeklyInboundExcel);
     $("exportBalanceExcelBtn").addEventListener("click", exportBalanceInboundExcel);
     $("copyYesterdayBtn").addEventListener("click", copyYesterday);
