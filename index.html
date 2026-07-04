@@ -711,6 +711,36 @@
     .empty-locations-toggle{background:#475467;color:#fff}
     .empty-locations-copy{background:#f79009;color:#111;font-weight:900}
     .empty-locations-actions{display:flex;gap:6px;align-items:center}
+    .empty-manual-add{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:6px;
+      margin:8px 0 6px;
+    }
+    .empty-manual-add input{
+      min-height:32px;
+      font-size:12px;
+      padding:6px 8px;
+      border-radius:8px;
+    }
+    .empty-manual-add button{
+      min-height:32px;
+      padding:5px 8px;
+      border-radius:8px;
+      font-size:12px;
+      box-shadow:none;
+      background:#f79009;
+      color:#111;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .empty-manual-note{
+      color:#9a5a10;
+      font-size:11px;
+      line-height:1.35;
+      margin:0 0 8px;
+      text-align:left;
+    }
     .empty-locations-body{
       padding:10px;
       max-height:calc(100vh - 135px);
@@ -777,6 +807,47 @@
       cursor:help;
     }
     .empty-location-chip .remain{font-weight:700;color:#9a3412;font-size:11px}
+    .empty-location-chip.manual{
+      border-color:#fb923c;
+      background:#fff7ed;
+      color:#7c2d12;
+      cursor:default;
+    }
+    .empty-location-chip .manual-tag{
+      font-size:10px;
+      font-weight:900;
+      color:#c2410c;
+    }
+    .empty-location-chip .manual-del{
+      border:0;
+      background:#d92d20;
+      color:#fff;
+      border-radius:999px;
+      width:18px;
+      height:18px;
+      min-height:18px;
+      padding:0;
+      line-height:18px;
+      font-size:11px;
+      box-shadow:none;
+    }
+    .location-cell.location-used-by-outbound{
+      background:#ffedd5 !important;
+      box-shadow:inset 0 0 0 3px #f79009;
+    }
+    .location-cell.location-used-by-outbound .location-textarea{
+      background:#fff7ed !important;
+    }
+    .location-used-note{
+      display:inline-block;
+      margin-top:2px;
+      padding:2px 6px;
+      border-radius:999px;
+      background:#fed7aa;
+      color:#9a3412;
+      font-size:10px;
+      font-weight:900;
+    }
     .empty-zone-empty{
       padding:8px;
       color:var(--muted);
@@ -897,6 +968,11 @@
       </div>
       <div class="empty-locations-body">
         <p class="empty-locations-hint">คำนวณจาก STP + PTR ลบด้วยหน้า “ส่งออก” ของวันที่เลือก ถ้าคงเหลือของโลนั้นเป็น 0 หรือติดลบ ระบบจะดึงเป็นโลว่างให้อัตโนมัติ</p>
+        <div class="empty-manual-add">
+          <input id="emptyLocationManualInput" type="text" placeholder="พิมพ์โลว่างเอง เช่น 1A-02, 2B45" />
+          <button id="emptyLocationManualAddBtn" type="button">+ เพิ่มมือ</button>
+        </div>
+        <p class="empty-manual-note">รายการที่เพิ่มมือจะถูกซิงก์ตามวันที่ และถูกรวมในปุ่มคัดลอกด้วย</p>
         <div id="emptyLocationLists"></div>
       </div>
     </aside>
@@ -947,7 +1023,7 @@
     <div class="dialog-head">นำเข้าข้อมูล CSV</div>
     <div class="dialog-body">
       <p class="hint">
-        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้า และคำนวณ PP/JB จาก Quantity (Kg) ÷ Quantity (bag) ให้อัตโนมัติ
+        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้า และคำนวณ PP/JB จาก Quantity (Kg) ÷ Quantity (bag) ให้อัตโนมัติ สำหรับหน้า “ส่งออก” รองรับรูปแบบ Booking: Location, Item Number, Qty, Qty Allocate, UOM, Status, Batch โดย Qty Allocate เช่น 1(20) 2(20) จะถูกแยกเป็นคันส่งออกตามเลขหน้าวงเล็บ และใช้จำนวนในวงเล็บเป็นจำนวนที่ตัดจริง
       </p>
       <textarea id="csvInput" placeholder="ตัวอย่าง:
 1	STAB-A T0170	A26060723	A070725A4	960	24,000.00	16	Plastic pallet (60)
@@ -1028,6 +1104,8 @@
     const emptyLocationCount = $("emptyLocationCount");
     const emptyLocationToggleBtn = $("emptyLocationToggleBtn");
     const emptyLocationCopyBtn = $("emptyLocationCopyBtn");
+    const emptyLocationManualInput = $("emptyLocationManualInput");
+    const emptyLocationManualAddBtn = $("emptyLocationManualAddBtn");
 
     let currentDate = "";
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
@@ -1042,6 +1120,7 @@
     let locationSyncTimer = null;
     let emptyLocationRowsByPage = {};
     let emptyLocationUnsubscribes = [];
+    let manualEmptyLocations = [];
     let emptyLocationSummary = { total:0, zones:{ A:[], B:[], C:[], D:[] } };
 
     // เรียงหมวดให้ “ด่วน!!” อยู่บนสุดเสมอ และใช้ To Do ชุดเดียวร่วมกันทั้ง STP/PTR ตามวันที่
@@ -1545,6 +1624,82 @@
       map.set(key, old);
     }
 
+    function buildOutboundPieceMap(){
+      const outbound = new Map();
+      for(const row of (emptyLocationRowsByPage[OUTBOUND_PAGE] || [])){
+        for(const piece of expandBalancePieces(row)) addBalancePiece(outbound, piece);
+      }
+      return outbound;
+    }
+
+    function locationExportUseSummary(row){
+      if(currentPage === OUTBOUND_PAGE) return null;
+      const pieces = expandBalancePieces(row);
+      if(!pieces.length) return null;
+      const outbound = buildOutboundPieceMap();
+      let inboundQty = 0;
+      let outboundQty = 0;
+      for(const piece of pieces){
+        inboundQty += piece.qty;
+        outboundQty += outbound.get(`${piece.code}|||${piece.skuKey}`)?.qty || 0;
+      }
+      if(outboundQty <= 0.0001) return null;
+      return { inboundQty, outboundQty, remainingQty:inboundQty - outboundQty };
+    }
+
+    function manualEmptyLocationsRef(date=currentDate){
+      return ref(db, `knsTransport/emptyLocationsManual/${date}/items`);
+    }
+
+    function manualEmptyLocationItemRef(id){
+      return ref(db, `knsTransport/emptyLocationsManual/${currentDate}/items/${id}`);
+    }
+
+    function parseManualEmptyLocationInput(text){
+      const raw = String(text || '');
+      const codeMatches = raw.match(/[12]\s*[ABCD]\s*-?\s*\d{1,2}/gi) || [];
+      const looseParts = raw.split(/[\n,;|/]+/g);
+      return Array.from(new Set([...codeMatches, ...looseParts]
+        .map(value => parseLocationCodeInfo(value))
+        .filter(Boolean)
+        .map(info => info.code)));
+    }
+
+    async function addManualEmptyLocations(){
+      const codes = parseManualEmptyLocationInput(emptyLocationManualInput?.value || '');
+      if(!codes.length){
+        alert('กรุณาพิมพ์โลว่าง เช่น 1A-02 หรือ 2B45');
+        emptyLocationManualInput?.focus();
+        return;
+      }
+      const updates = {};
+      for(const code of codes){
+        const info = parseLocationCodeInfo(code);
+        if(!info) continue;
+        const newRef = push(manualEmptyLocationsRef());
+        updates[newRef.key] = {
+          id:newRef.key,
+          code:info.code,
+          zone:info.zone,
+          side:info.side,
+          number:info.number,
+          manual:true,
+          createdAt:serverTimestamp(),
+          updatedAt:serverTimestamp()
+        };
+      }
+      if(Object.keys(updates).length){
+        await update(manualEmptyLocationsRef(), updates);
+        emptyLocationManualInput.value = '';
+        emptyLocationManualInput.focus();
+      }
+    }
+
+    async function deleteManualEmptyLocation(id){
+      if(!id) return;
+      await remove(manualEmptyLocationItemRef(id));
+    }
+
     function buildEmptyLocationSummary(){
       const inbound = new Map();
       const outbound = new Map();
@@ -1589,7 +1744,30 @@
       const zones = { A:[], B:[], C:[], D:[] };
       for(const loc of byLocation.values()){
         const isEmpty = loc.details.length && loc.details.every(item => item.remainingQty <= 0.0001);
-        if(isEmpty && zones[loc.zone]) zones[loc.zone].push(loc);
+        if(isEmpty && zones[loc.zone]) zones[loc.zone].push({ ...loc, auto:true });
+      }
+      for(const item of manualEmptyLocations){
+        const info = parseLocationCodeInfo(item.code);
+        if(!info || !zones[info.zone]) continue;
+        const existing = zones[info.zone].find(loc => loc.code === info.code);
+        if(existing){
+          existing.manual = true;
+          existing.manualId = item.id;
+        }else{
+          zones[info.zone].push({
+            code:info.code,
+            zone:info.zone,
+            side:info.side,
+            number:info.number,
+            inboundQty:0,
+            outboundQty:0,
+            remainingQty:0,
+            details:[],
+            manual:true,
+            manualOnly:true,
+            manualId:item.id
+          });
+        }
       }
       for(const zone of EMPTY_LOCATION_ZONES){
         zones[zone].sort((a,b) => (a.side.localeCompare(b.side) || a.number - b.number || a.code.localeCompare(b.code)));
@@ -1599,8 +1777,8 @@
 
     function emptyLocationTooltip(loc){
       const lines = [
-        `${loc.code}`,
-        `รับเข้า: ${fmt(loc.inboundQty, 0)} / ส่งออก: ${fmt(loc.outboundQty, 0)} / คงเหลือ: ${fmt(Math.max(loc.remainingQty, 0), 0)}`,
+        `${loc.code}${loc.manual ? ' (เพิ่มมือ)' : ''}`,
+        loc.manualOnly ? 'รายการนี้เพิ่มด้วยมือ' : `รับเข้า: ${fmt(loc.inboundQty, 0)} / ส่งออก: ${fmt(loc.outboundQty, 0)} / คงเหลือ: ${fmt(Math.max(loc.remainingQty, 0), 0)}`,
         ...loc.details.slice(0, 6).map(item => {
           const product = [item.productName, item.batchNo, item.tankCode].filter(Boolean).join(' / ');
           return `${product || 'สินค้า'}: ${fmt(item.inboundQty, 0)} - ${fmt(item.outboundQty, 0)} = ${fmt(item.remainingQty, 0)}`;
@@ -1617,8 +1795,9 @@
       emptyLocationLists.innerHTML = EMPTY_LOCATION_ZONES.map(zone => {
         const items = emptyLocationSummary.zones[zone] || [];
         const body = items.length ? items.map(loc => `
-          <span class="empty-location-chip" title="${escapeAttr(emptyLocationTooltip(loc))}">
-            ${escapeHtml(loc.code)} <span class="remain">ว่าง</span>
+          <span class="empty-location-chip ${loc.manual ? 'manual' : ''}" title="${escapeAttr(emptyLocationTooltip(loc))}">
+            ${escapeHtml(loc.code)} <span class="remain">ว่าง</span>${loc.manual ? ' <span class="manual-tag">มือ</span>' : ''}
+            ${loc.manualId ? `<button class="manual-del" type="button" data-empty-action="delete-manual" data-id="${escapeAttr(loc.manualId)}" title="ลบรายการมือ">×</button>` : ''}
           </span>
         `).join('') : `<div class="empty-zone-empty">ยังไม่มีโลว่าง Zone ${zone}</div>`;
         return `
@@ -1634,11 +1813,25 @@
       emptyLocationUnsubscribes.forEach(unsub => { try{ if(typeof unsub === 'function') unsub(); }catch(_){} });
       emptyLocationUnsubscribes = [];
       emptyLocationRowsByPage = { STP:[], PTR:[], OUT:[] };
+      manualEmptyLocations = [];
       renderEmptyLocations();
+      const manualOff = onValue(manualEmptyLocationsRef(date), (snap) => {
+        manualEmptyLocations = Object.entries(snap.val() || {}).map(([id, item]) => ({
+          id,
+          code:String(item?.code || '').trim(),
+          zone:item?.zone || '',
+          side:item?.side || '',
+          number:Number(item?.number || 0),
+          manual:true
+        })).filter(item => parseLocationCodeInfo(item.code));
+        renderEmptyLocations();
+      }, (err) => console.error('manual empty location listener', err));
+      emptyLocationUnsubscribes.push(manualOff);
       for(const page of [...BALANCE_SOURCE_PAGES, OUTBOUND_PAGE]){
         const off = onValue(dateRef(date, page), (snap) => {
           emptyLocationRowsByPage[page] = sortRows(snap.val() || {});
           renderEmptyLocations();
+          if(currentPage !== OUTBOUND_PAGE) renderRows();
         }, (err) => {
           console.error(`empty location listener ${page}`, err);
         });
@@ -1715,6 +1908,12 @@
 
     function sortRows(raw){
       return Object.entries(raw || {}).map(([id, data]) => ({ id, ...data })).sort((a,b) => {
+        const ba = String(a.bookingNo || '').trim();
+        const bb = String(b.bookingNo || '').trim();
+        if(ba || bb){
+          const bookingCompare = ba.localeCompare(bb, 'th', { numeric:true });
+          if(bookingCompare) return bookingCompare;
+        }
         const ta = num(a.tripNo), tb = num(b.tripNo);
         if(ta !== tb) return ta - tb;
         return rowOrderValue(a) - rowOrderValue(b);
@@ -1831,15 +2030,18 @@
       const note = updatedAt ? `แก้ไขล่าสุด ${formatUpdateTime(updatedAt)}` : "ยังไม่มีประวัติแก้ไข Location";
       const merged = count > 1 ? `<span class="location-merged-note">รวม ${count} แถว Product+Tank เดียวกัน</span>` : "";
       const isExport = String(locationValue).includes('ส่งออก');
+      const exportUse = locationExportUseSummary(row);
+      const exportNote = exportUse ? `<span class="location-used-note">เคยส่งออก ${fmt(exportUse.outboundQty, 0)} / เหลือ ${fmt(Math.max(exportUse.remainingQty, 0), 0)}</span>` : '';
       const classes = [
         'location-cell',
         recently ? 'location-updated' : '',
-        isExport ? 'location-export' : ''
+        isExport ? 'location-export' : '',
+        exportUse ? 'location-used-by-outbound' : ''
       ].filter(Boolean).join(' ');
       return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
         <div class="location-editor">
           <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="">${escapeHtml(editValue)}</textarea>
-          <div class="location-meta">${escapeHtml(note)} ${merged}</div>
+          <div class="location-meta">${escapeHtml(note)} ${merged} ${exportNote}</div>
         </div>
       </td>`;
     }
@@ -2236,6 +2438,10 @@
         location: knownLocation?.location ?? prefill.location ?? "",
         locationUpdatedAt: knownLocation?.updatedAt ?? null,
         tripStatus: prefill.tripStatus ?? "",
+        bookingNo: prefill.bookingNo ?? "",
+        allocateText: prefill.allocateText ?? "",
+        exportRound: prefill.exportRound ?? "",
+        sourceQty: prefill.sourceQty ?? "",
         carryOver: !!prefill.carryOver,
         carryOverFrom: prefill.carryOverFrom ?? null,
         carryOverAt: prefill.carryOverAt ?? null,
@@ -3244,7 +3450,34 @@
       return { batchNo:text, tankCode:'' };
     }
 
-    function rowFromInventoryCells(cols, carryTripNo=""){
+    function parseQtyAllocateText(value){
+      const entries = [];
+      const text = String(value || '').trim();
+      const re = /(\d+)\s*\(\s*([\d,.]+)\s*\)/g;
+      let match;
+      while((match = re.exec(text))){
+        const round = String(match[1]).trim();
+        const qty = cleanNumberText(match[2]);
+        if(round && num(qty) > 0) entries.push({ round, qty });
+      }
+      return entries;
+    }
+
+    function extractBookingFromCells(cells, currentBooking=''){
+      const cloned = [...cells];
+      const first = String(cloned[0] || '').trim();
+      const m = first.match(/^([A-Z0-9][A-Z0-9_-]{5,})\s*[:：]\s*(.*)$/i);
+      if(!m) return { cells:cloned, bookingNo:currentBooking };
+      cloned[0] = m[2].trim();
+      return { cells:cloned, bookingNo:m[1].trim().toUpperCase() };
+    }
+
+    function normalizeParsedRows(parsed){
+      if(!parsed) return [];
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [parsed];
+    }
+
+    function rowFromInventoryCells(cols, carryTripNo="", bookingNo=""){
       if(cols.length < 6) return null;
       const location = normalizeInventoryLocationText(cols[0]);
       const firstIsLocation = /^location\b/i.test(String(cols[0] || '')) || !!parseLocationCodeInfo(location) || /^โกดัง|^ส่งออก/i.test(String(cols[0] || '').trim());
@@ -3252,31 +3485,51 @@
       const productName = String(cols[1] ?? '').trim();
       const qty = cleanNumberText(cols[2]);
       if(!productName || qty === '' || /^item\s*number$/i.test(productName) || !num(qty)) return null;
+      const allocateText = String(cols[3] ?? '').trim();
+      const allocations = parseQtyAllocateText(allocateText);
       const uom = String(cols[4] ?? '').trim();
       const batchCell = String(cols[6] ?? cols[5] ?? '').trim();
+      const inventoryStatus = String(cols[5] ?? '').trim();
       const { batchNo, tankCode } = splitBatchTankText(batchCell);
       const qtyNumber = num(qty);
       const packType = /JB|850/i.test(uom) ? 'JB' : (/PP|25/i.test(uom) ? 'PP' : '');
       const factor = packType === 'JB' ? 850 : (packType === 'PP' ? 25 : 0);
-      const kg = factor && qtyNumber ? qtyNumber * factor : '';
-      return {
-        tripNo: carryTripNo || '',
-        productName,
-        batchNo,
-        tankCode: normalizedTank(tankCode),
-        bags: qty,
-        kg,
-        pallets:'',
-        packType,
-        remark:[cols[3] ? `Allocate: ${cols[3]}` : '', cols[5] && cols[5] !== batchCell ? cols[5] : ''].filter(Boolean).join(' / ') || 'ส่งออก',
-        location
+      const baseRemarkParts = [
+        bookingNo ? `Booking: ${bookingNo}` : '',
+        inventoryStatus && inventoryStatus !== batchCell ? inventoryStatus : ''
+      ].filter(Boolean);
+
+      const makeRow = (usedQty, round='') => {
+        const usedNumber = num(usedQty);
+        return {
+          tripNo: round || carryTripNo || '',
+          productName,
+          batchNo,
+          tankCode: normalizedTank(tankCode),
+          bags: usedQty,
+          kg: factor && usedNumber ? usedNumber * factor : '',
+          pallets:'',
+          packType,
+          remark:[...baseRemarkParts, round ? `Allocate: ${round}(${usedQty})` : (allocateText ? `Allocate: ${allocateText}` : ''), `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / ') || 'ส่งออก',
+          location,
+          bookingNo,
+          allocateText,
+          exportRound: round,
+          sourceQty: qty
+        };
       };
+
+      // สำหรับหน้าส่งออก: Qty Allocate คือจำนวนที่ใช้จริง และเลขหน้าวงเล็บคือลำดับคันส่งออก
+      if(allocations.length){
+        return allocations.map(item => makeRow(item.qty, item.round));
+      }
+      return makeRow(qty, carryTripNo || '');
     }
 
-    function rowFromCells(cells, carryTripNo=""){
+    function rowFromCells(cells, carryTripNo="", bookingNo=""){
       let cols = cells.map(x => String(x ?? "").trim()).filter((x,i) => x || i === 0);
       if(!cols.length) return null;
-      const inventoryRow = rowFromInventoryCells(cols, carryTripNo);
+      const inventoryRow = rowFromInventoryCells(cols, carryTripNo, bookingNo);
       if(inventoryRow) return inventoryRow;
       if(cols[0] === "-" || /^remark$/i.test(cols[0])) return null;
       if(/^date$/i.test(cols[0]) || /^no\.?$/i.test(cols[0])) return null;
@@ -3299,8 +3552,9 @@
         kg: cleanNumberText(cols[4]),
         pallets: cleanNumberText(cols[5]),
         packType: calcPackType(cleanNumberText(cols[3]), cleanNumberText(cols[4])),
-        remark: (cols.slice(6).join(" ") || "Plastic pallet (60)").replace(/\s+-\s*$/, "").trim(),
-        location: ""
+        remark: [bookingNo ? `Booking: ${bookingNo}` : '', (cols.slice(6).join(" ") || "Plastic pallet (60)").replace(/\s+-\s*$/, "").trim()].filter(Boolean).join(' / '),
+        location: "",
+        bookingNo
       };
     }
 
@@ -3309,17 +3563,22 @@
       if(!raw) return [];
       const rows = [];
       let carryTripNo = "";
+      let currentBookingNo = "";
 
       // แบบคัดลอกจาก Excel / Google Sheets จะคั่นคอลัมน์ด้วย Tab และขึ้นบรรทัดใหม่เป็นรายแถว
       const lines = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
       const hasTabRows = lines.some(line => line.includes("\t"));
       if(hasTabRows){
         for(const line of lines){
-          const cells = line.split(/\t+/).map(x => x.trim());
-          const row = rowFromCells(cells, carryTripNo);
-          if(row){
+          let cells = line.split(/	+/).map(x => x.trim());
+          const extracted = extractBookingFromCells(cells, currentBookingNo);
+          cells = extracted.cells;
+          currentBookingNo = extracted.bookingNo || currentBookingNo;
+          const parsedRows = normalizeParsedRows(rowFromCells(cells, carryTripNo, currentBookingNo));
+          for(const row of parsedRows){
             carryTripNo = row.tripNo || carryTripNo;
             if(!row.tripNo) row.tripNo = carryTripNo;
+            if(currentBookingNo && !row.bookingNo) row.bookingNo = currentBookingNo;
             rows.push(row);
           }
         }
@@ -3329,10 +3588,15 @@
       // CSV ปกติ: ใช้ได้เมื่อไม่มี comma เป็นตัวคั่นหลักพันในตัวเลข หรือมี quote ครอบไว้
       if(lines.some(line => line.includes(",") && !/\d,\d{3}/.test(line))){
         for(const line of lines){
-          const row = rowFromCells(parseCSVLine(line), carryTripNo);
-          if(row){
+          let cells = parseCSVLine(line);
+          const extracted = extractBookingFromCells(cells, currentBookingNo);
+          cells = extracted.cells;
+          currentBookingNo = extracted.bookingNo || currentBookingNo;
+          const parsedRows = normalizeParsedRows(rowFromCells(cells, carryTripNo, currentBookingNo));
+          for(const row of parsedRows){
             carryTripNo = row.tripNo || carryTripNo;
             if(!row.tripNo) row.tripNo = carryTripNo;
+            if(currentBookingNo && !row.bookingNo) row.bookingNo = currentBookingNo;
             rows.push(row);
           }
         }
@@ -3482,6 +3746,18 @@
       localStorage.setItem("knsTransportEmptyLocationsCollapsed", collapsed ? "1" : "0");
     });
     emptyLocationCopyBtn.addEventListener("click", copyEmptyLocations);
+    emptyLocationManualAddBtn.addEventListener("click", addManualEmptyLocations);
+    emptyLocationManualInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        addManualEmptyLocations();
+      }
+    });
+    emptyLocationLists.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-empty-action='delete-manual']");
+      if(!btn) return;
+      deleteManualEmptyLocation(btn.dataset.id);
+    });
 
     $("addRowBtn").addEventListener("click", () => addRow());
     $("exportBtn").addEventListener("click", () => {
