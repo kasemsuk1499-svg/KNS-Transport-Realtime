@@ -654,9 +654,182 @@
     body[data-page="PTR"] .todo-toggle{background:#6f8f78;color:#fff}
     body[data-page="PTR"] .todo-actions .todo-edit{background:#6f8f78;color:#fff}
 
+
+    .empty-locations-widget{
+      position:fixed;
+      right:12px;
+      top:96px;
+      z-index:30;
+      width:360px;
+      max-width:calc(100vw - 24px);
+      background:rgba(255,255,255,.97);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 12px 34px rgba(20,40,60,.18);
+      overflow:hidden;
+      backdrop-filter:blur(10px);
+    }
+    .empty-locations-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:10px 12px;
+      background:#fff8db;
+      border-bottom:1px solid var(--line);
+    }
+    .empty-locations-title{
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      white-space:nowrap;
+    }
+    .empty-locations-count{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:32px;
+      height:22px;
+      padding:0 7px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:#7a4b00;
+      font-size:12px;
+      font-weight:900;
+    }
+    .empty-locations-toggle,
+    .empty-locations-copy{
+      min-height:28px;
+      padding:4px 8px;
+      border-radius:8px;
+      box-shadow:none;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .empty-locations-toggle{background:#475467;color:#fff}
+    .empty-locations-copy{background:#f79009;color:#111;font-weight:900}
+    .empty-locations-actions{display:flex;gap:6px;align-items:center}
+    .empty-locations-body{
+      padding:10px;
+      max-height:calc(100vh - 135px);
+      overflow:auto;
+    }
+    .empty-locations-hint{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.35;
+      margin:0 0 8px;
+      text-align:left;
+    }
+    .empty-zone{
+      border:1px solid var(--line);
+      border-radius:12px;
+      overflow:hidden;
+      margin-top:8px;
+      background:#fff;
+    }
+    .empty-zone-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:7px 9px;
+      font-weight:900;
+      font-size:13px;
+      background:#f6f9fb;
+      border-bottom:1px solid var(--line);
+    }
+    .empty-zone-title .badge{
+      min-width:24px;
+      text-align:center;
+      border-radius:999px;
+      padding:1px 6px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:#7a4b00;
+      font-size:11px;
+      font-weight:900;
+    }
+    .empty-zone[data-zone="A"] .empty-zone-title{background:#e8f7ff;color:#075985}
+    .empty-zone[data-zone="B"] .empty-zone-title{background:#effcf3;color:#166534}
+    .empty-zone[data-zone="C"] .empty-zone-title{background:#fff7ed;color:#9a3412}
+    .empty-zone[data-zone="D"] .empty-zone-title{background:#f5f3ff;color:#5b21b6}
+    .empty-location-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      padding:8px;
+      min-height:38px;
+    }
+    .empty-location-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      border-radius:999px;
+      border:1px solid #facc15;
+      background:#fffbeb;
+      color:#713f12;
+      padding:5px 8px;
+      font-size:12px;
+      font-weight:900;
+      cursor:help;
+    }
+    .empty-location-chip .remain{font-weight:700;color:#9a3412;font-size:11px}
+    .empty-zone-empty{
+      padding:8px;
+      color:var(--muted);
+      font-size:12px;
+      text-align:center;
+      width:100%;
+    }
+    .empty-locations-widget.collapsed .empty-locations-body{display:none}
+    body[data-page="OUT"]{
+      background:linear-gradient(180deg, #fff7ed, #fffaf2);
+      color:#351b05;
+    }
+    body[data-page="OUT"] header{
+      background:rgba(255,250,242,.94);
+      border-bottom-color:#fed7aa;
+    }
+    .page-tab[data-page="OUT"].active,
+    body[data-page="OUT"] button{
+      background:#f79009;
+      border-color:#f79009;
+      color:#111;
+    }
+    body[data-page="OUT"] button.secondary{background:#9a5a10;color:#fff}
+    body[data-page="OUT"] button.good{background:#f79009;color:#111}
+    body[data-page="OUT"] button.danger{background:#d92d20;color:#fff}
+    body[data-page="OUT"] button.light,
+    body[data-page="OUT"] .page-tab{
+      background:#fff7ed;
+      border-color:#fed7aa;
+      color:#7c2d12;
+    }
+    body[data-page="OUT"] .stat,
+    body[data-page="OUT"] .panel,
+    body[data-page="OUT"] .todo-widget,
+    body[data-page="OUT"] .empty-locations-widget{
+      background:rgba(255,255,255,.97);
+      border-color:#fed7aa;
+      box-shadow:0 8px 22px rgba(154,90,16,.12);
+    }
+    body[data-page="OUT"] .panel-head,
+    body[data-page="OUT"] .todo-head,
+    body[data-page="OUT"] .empty-locations-head{border-bottom-color:#fed7aa}
+    body[data-page="OUT"] th{background:#ffedd5}
+    body[data-page="OUT"] th.location{background:#fbbf24}
+    body[data-page="OUT"] tr.tank-shade-b td{background:#fff7ed}
+    body[data-page="OUT"] tr.tank-shade-a td.location-cell,
+    body[data-page="OUT"] tr.tank-shade-b td.location-cell{background:#fffbeb}
+
     @media (max-width:760px){
-      .todo-widget{position:relative;top:auto;left:auto;width:auto;margin:12px 0;z-index:1}
-      .todo-body{max-height:none}
+      .todo-widget,
+      .empty-locations-widget{position:relative;top:auto;left:auto;right:auto;width:auto;margin:12px 0;z-index:1}
+      .todo-body,
+      .empty-locations-body{max-height:none}
       .todo-add{grid-template-columns:1fr}
       header{position:relative}
       h1{text-align:left;font-size:18px}
@@ -677,6 +850,7 @@
         <div class="page-tabs" aria-label="เลือกหน้า">
           <button class="page-tab active" data-page="STP" type="button">STP</button>
           <button class="page-tab" data-page="PTR" type="button">PTR</button>
+          <button class="page-tab" data-page="OUT" type="button">ส่งออก</button>
         </div>
         <label>วันที่
           <input type="date" id="dateInput" />
@@ -696,7 +870,7 @@
 
     <aside class="todo-widget" id="todoWidget" aria-label="To Do List ประจำวัน">
       <div class="todo-head">
-        <div class="todo-title">☑ To Do List รวม STP/PTR <span class="todo-count" id="todoCount">0/0</span></div>
+        <div class="todo-title">☑ To Do List รวม STP/PTR/ส่งออก <span class="todo-count" id="todoCount">0/0</span></div>
         <button class="todo-toggle" id="todoToggleBtn" type="button">ย่อ</button>
       </div>
       <div class="todo-body">
@@ -710,6 +884,20 @@
           <button id="todoAddBtn" class="good" type="button">+ เพิ่ม</button>
         </div>
         <div id="todoLists"></div>
+      </div>
+    </aside>
+
+    <aside class="empty-locations-widget" id="emptyLocationsWidget" aria-label="โลเคชั่นว่างประจำวัน">
+      <div class="empty-locations-head">
+        <div class="empty-locations-title">📦 โลว่างวันนี้ <span class="empty-locations-count" id="emptyLocationCount">0</span></div>
+        <div class="empty-locations-actions">
+          <button class="empty-locations-copy" id="emptyLocationCopyBtn" type="button">คัดลอก</button>
+          <button class="empty-locations-toggle" id="emptyLocationToggleBtn" type="button">ย่อ</button>
+        </div>
+      </div>
+      <div class="empty-locations-body">
+        <p class="empty-locations-hint">คำนวณจาก STP + PTR ลบด้วยหน้า “ส่งออก” ของวันที่เลือก ถ้าคงเหลือของโลนั้นเป็น 0 หรือติดลบ ระบบจะดึงเป็นโลว่างให้อัตโนมัติ</p>
+        <div id="emptyLocationLists"></div>
       </div>
     </aside>
     <section class="status">
@@ -835,6 +1023,11 @@
     const todoAddBtn = $("todoAddBtn");
     const todoToggleBtn = $("todoToggleBtn");
     const todoCount = $("todoCount");
+    const emptyLocationsWidget = $("emptyLocationsWidget");
+    const emptyLocationLists = $("emptyLocationLists");
+    const emptyLocationCount = $("emptyLocationCount");
+    const emptyLocationToggleBtn = $("emptyLocationToggleBtn");
+    const emptyLocationCopyBtn = $("emptyLocationCopyBtn");
 
     let currentDate = "";
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
@@ -847,6 +1040,9 @@
     let productOptionsCache = {};
     let saveTimers = new Map();
     let locationSyncTimer = null;
+    let emptyLocationRowsByPage = {};
+    let emptyLocationUnsubscribes = [];
+    let emptyLocationSummary = { total:0, zones:{ A:[], B:[], C:[], D:[] } };
 
     // เรียงหมวดให้ “ด่วน!!” อยู่บนสุดเสมอ และใช้ To Do ชุดเดียวร่วมกันทั้ง STP/PTR ตามวันที่
     const TODO_CATEGORIES = ["ด่วน!!", "ระหว่างวัน", "เตรียมไว้ตอนเย็น"];
@@ -863,6 +1059,11 @@
       { text:"เช็คโลว่างก่อนกลับ", category:"เตรียมไว้ตอนเย็น" }
     ];
     let todoItems = [];
+
+    const OUTBOUND_PAGE = "OUT";
+    const BALANCE_SOURCE_PAGES = ["STP", "PTR"];
+    const EMPTY_LOCATION_ZONES = ["A", "B", "C", "D"];
+    const PAGE_LABELS = { STP:"STP", PTR:"PTR", OUT:"ส่งออก" };
 
     const fields = [
       "tripNo","productName","batchNo","tankCode",
@@ -1248,6 +1449,8 @@
     }
 
     function getDisplayLocation(row){
+      // หน้า “ส่งออก” ต้องเก็บ Location แยกตามแถว เพราะสินค้าเดียวกันอาจถูกดึงออกจากหลายโลในวันเดียว
+      if(currentPage === OUTBOUND_PAGE) return String(row?.location ?? '').trim();
       const key = makeProductTankKey(row?.productName, row?.tankCode);
       const meta = key ? (tankLocationCache[key] || {}) : {};
       return String(meta.location ?? row?.location ?? '').trim();
@@ -1278,6 +1481,188 @@
 
     function formatLocationForEdit(locationText){
       return String(locationText || '').trim();
+    }
+
+
+    function parseLocationCodeInfo(place){
+      const normalized = normalizeLocationPlace(place);
+      const m = String(normalized || '').toUpperCase().match(/^([12])([ABCD])(\d{2})$/);
+      if(!m) return null;
+      const number = Number(m[3]);
+      if(number < 1 || number > 60) return null;
+      return { code:`${m[1]}${m[2]}${m[3]}`, side:m[1], zone:m[2], number };
+    }
+
+    function cleanBalanceText(value){
+      return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    function makeBalanceSkuKey(row){
+      const product = cleanBalanceText(row?.productName);
+      const batch = cleanBalanceText(row?.batchNo);
+      const tank = cleanBalanceText(row?.tankCode);
+      if(!product && !batch && !tank) return '';
+      return `${product}|${batch}|${tank}`;
+    }
+
+    function balanceQuantity(row){
+      const bags = num(row?.bags);
+      if(bags) return bags;
+      const kg = num(row?.kg);
+      return kg || 0;
+    }
+
+    function expandBalancePieces(row){
+      const qty = balanceQuantity(row);
+      if(!qty) return [];
+      const skuKey = makeBalanceSkuKey(row);
+      if(!skuKey) return [];
+      const parts = splitLocationParts(row?.location || row?.LOCATION || '');
+      const validParts = parts
+        .map(part => ({ ...part, info:parseLocationCodeInfo(part.place), count:num(part.count) }))
+        .filter(part => part.info);
+      if(!validParts.length) return [];
+
+      const hasAllCounts = validParts.length > 1 && validParts.every(part => part.count > 0);
+      const totalCount = hasAllCounts ? validParts.reduce((sum, part) => sum + part.count, 0) : 0;
+      return validParts.map(part => ({
+        code:part.info.code,
+        zone:part.info.zone,
+        side:part.info.side,
+        number:part.info.number,
+        skuKey,
+        productName:String(row?.productName || '').trim(),
+        batchNo:String(row?.batchNo || '').trim(),
+        tankCode:String(row?.tankCode || '').trim(),
+        qty:hasAllCounts && totalCount ? qty * (part.count / totalCount) : (validParts.length === 1 ? qty : qty / validParts.length)
+      }));
+    }
+
+    function addBalancePiece(map, piece){
+      const key = `${piece.code}|||${piece.skuKey}`;
+      const old = map.get(key) || { ...piece, qty:0 };
+      old.qty += piece.qty;
+      map.set(key, old);
+    }
+
+    function buildEmptyLocationSummary(){
+      const inbound = new Map();
+      const outbound = new Map();
+      for(const page of BALANCE_SOURCE_PAGES){
+        const rows = emptyLocationRowsByPage[page] || [];
+        for(const row of rows){
+          for(const piece of expandBalancePieces(row)) addBalancePiece(inbound, piece);
+        }
+      }
+      for(const row of (emptyLocationRowsByPage[OUTBOUND_PAGE] || [])){
+        for(const piece of expandBalancePieces(row)) addBalancePiece(outbound, piece);
+      }
+
+      const byLocation = new Map();
+      for(const [key, stock] of inbound.entries()){
+        const outQty = outbound.get(key)?.qty || 0;
+        const remaining = stock.qty - outQty;
+        const current = byLocation.get(stock.code) || {
+          code:stock.code,
+          zone:stock.zone,
+          side:stock.side,
+          number:stock.number,
+          inboundQty:0,
+          outboundQty:0,
+          remainingQty:0,
+          details:[]
+        };
+        current.inboundQty += stock.qty;
+        current.outboundQty += outQty;
+        current.remainingQty += Math.max(remaining, 0);
+        current.details.push({
+          productName:stock.productName,
+          batchNo:stock.batchNo,
+          tankCode:stock.tankCode,
+          inboundQty:stock.qty,
+          outboundQty:outQty,
+          remainingQty:remaining
+        });
+        byLocation.set(stock.code, current);
+      }
+
+      const zones = { A:[], B:[], C:[], D:[] };
+      for(const loc of byLocation.values()){
+        const isEmpty = loc.details.length && loc.details.every(item => item.remainingQty <= 0.0001);
+        if(isEmpty && zones[loc.zone]) zones[loc.zone].push(loc);
+      }
+      for(const zone of EMPTY_LOCATION_ZONES){
+        zones[zone].sort((a,b) => (a.side.localeCompare(b.side) || a.number - b.number || a.code.localeCompare(b.code)));
+      }
+      return { total:Object.values(zones).reduce((sum, list) => sum + list.length, 0), zones };
+    }
+
+    function emptyLocationTooltip(loc){
+      const lines = [
+        `${loc.code}`,
+        `รับเข้า: ${fmt(loc.inboundQty, 0)} / ส่งออก: ${fmt(loc.outboundQty, 0)} / คงเหลือ: ${fmt(Math.max(loc.remainingQty, 0), 0)}`,
+        ...loc.details.slice(0, 6).map(item => {
+          const product = [item.productName, item.batchNo, item.tankCode].filter(Boolean).join(' / ');
+          return `${product || 'สินค้า'}: ${fmt(item.inboundQty, 0)} - ${fmt(item.outboundQty, 0)} = ${fmt(item.remainingQty, 0)}`;
+        })
+      ];
+      if(loc.details.length > 6) lines.push(`...อีก ${loc.details.length - 6} รายการ`);
+      return lines.join('\n');
+    }
+
+    function renderEmptyLocations(){
+      if(!emptyLocationLists || !emptyLocationCount) return;
+      emptyLocationSummary = buildEmptyLocationSummary();
+      emptyLocationCount.textContent = fmt(emptyLocationSummary.total);
+      emptyLocationLists.innerHTML = EMPTY_LOCATION_ZONES.map(zone => {
+        const items = emptyLocationSummary.zones[zone] || [];
+        const body = items.length ? items.map(loc => `
+          <span class="empty-location-chip" title="${escapeAttr(emptyLocationTooltip(loc))}">
+            ${escapeHtml(loc.code)} <span class="remain">ว่าง</span>
+          </span>
+        `).join('') : `<div class="empty-zone-empty">ยังไม่มีโลว่าง Zone ${zone}</div>`;
+        return `
+          <section class="empty-zone" data-zone="${zone}">
+            <div class="empty-zone-title"><span>ZONE ${zone}</span><span class="badge">${items.length}</span></div>
+            <div class="empty-location-list">${body}</div>
+          </section>
+        `;
+      }).join('');
+    }
+
+    function listenEmptyLocations(date){
+      emptyLocationUnsubscribes.forEach(unsub => { try{ if(typeof unsub === 'function') unsub(); }catch(_){} });
+      emptyLocationUnsubscribes = [];
+      emptyLocationRowsByPage = { STP:[], PTR:[], OUT:[] };
+      renderEmptyLocations();
+      for(const page of [...BALANCE_SOURCE_PAGES, OUTBOUND_PAGE]){
+        const off = onValue(dateRef(date, page), (snap) => {
+          emptyLocationRowsByPage[page] = sortRows(snap.val() || {});
+          renderEmptyLocations();
+        }, (err) => {
+          console.error(`empty location listener ${page}`, err);
+        });
+        emptyLocationUnsubscribes.push(off);
+      }
+    }
+
+    function emptyLocationTextForClipboard(){
+      const lines = [`โลว่างประจำวันที่ ${currentDate}`];
+      for(const zone of EMPTY_LOCATION_ZONES){
+        const codes = (emptyLocationSummary.zones[zone] || []).map(loc => loc.code);
+        lines.push(`ZONE ${zone}: ${codes.length ? codes.join(', ') : '-'}`);
+      }
+      return lines.join('\n');
+    }
+
+    async function copyEmptyLocations(){
+      const text = emptyLocationTextForClipboard();
+      try{
+        await navigator.clipboard.writeText(text);
+        alert('คัดลอกโลว่างเรียบร้อยแล้ว');
+      }catch(_){
+        prompt('คัดลอกรายการโลว่าง', text);
+      }
     }
 
     function hasExportLocation(row){
@@ -1313,10 +1698,11 @@
     }
 
     function applyPageUI(){
+      if(!PAGE_LABELS[currentPage]) currentPage = "STP";
       pageTabs.forEach(btn => btn.classList.toggle("active", btn.dataset.page === currentPage));
       document.body.dataset.page = currentPage;
-      pageName.textContent = currentPage;
-      document.title = `KNS ${currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
+      pageName.textContent = PAGE_LABELS[currentPage] || currentPage;
+      document.title = `KNS ${PAGE_LABELS[currentPage] || currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
     }
 
     function rowOrderValue(row, fallbackIndex=0){
@@ -1339,6 +1725,7 @@
       currentDate = date;
       applyPageUI();
       listenTodos();
+      listenEmptyLocations(date);
       if(unsubscribe) unsubscribe();
       if(tankLocationUnsubscribe) tankLocationUnsubscribe();
       if(productOptionsUnsubscribe) productOptionsUnsubscribe();
@@ -1459,6 +1846,10 @@
 
     function buildLocationSpans(rows){
       const spans = new Map();
+      if(currentPage === OUTBOUND_PAGE){
+        for(const row of rows) spans.set(row.id, { show:true, span:1, count:1 });
+        return spans;
+      }
       for(let i=0; i<rows.length; i++){
         const key = makeProductTankKey(rows[i].productName, rows[i].tankCode);
         if(!key){ spans.set(rows[i].id, { show:true, span:1, count:1 }); continue; }
@@ -1622,7 +2013,10 @@
         return;
       }
       if(!rowsCache.length){
-        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย</td></tr>`;
+        const emptyText = currentPage === OUTBOUND_PAGE
+          ? 'ยังไม่มีข้อมูลส่งออกของวันนี้ กด “เพิ่มคันท้ายสุด” หรือนำเข้า CSV เพื่อเริ่มคีย์แป้งส่งออก'
+          : 'ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย';
+        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">${emptyText}</td></tr>`;
         return;
       }
       const locationSpans = buildLocationSpans(rowsCache);
@@ -1680,6 +2074,7 @@
     }
 
     async function syncRowsWithTankLocations(){
+      if(currentPage === OUTBOUND_PAGE) return;
       if(!rowsCache.length) return;
       const updates = {};
       const memoryUpdates = {};
@@ -1731,8 +2126,17 @@
     }
 
     async function saveLocationForTank(rowId, locationValue){
-      // เก็บข้อความ Location ตาม Product name + Tank code เพื่อรองรับ Tank เดียวกันแต่คนละสินค้า
+      // หน้า “ส่งออก” ใช้โลเคชั่นรายแถว ไม่ซิงก์ตาม Product+Tank เพื่อไม่ให้ข้อมูลโลต้นทางถูกทับกัน
       locationValue = String(locationValue || '').trim();
+      if(currentPage === OUTBOUND_PAGE){
+        await update(rowRef(rowId), {
+          location: locationValue,
+          locationUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return;
+      }
+      // เก็บข้อความ Location ตาม Product name + Tank code เพื่อรองรับ Tank เดียวกันแต่คนละสินค้า
       const row = rowsCache.find(r => r.id === rowId);
       const product = normalizedProduct(row?.productName);
       const tank = normalizedTank(row?.tankCode);
@@ -1772,6 +2176,7 @@
     }
 
     async function applyLocationAfterProductOrTankChange(rowId, productName, tankCode){
+      if(currentPage === OUTBOUND_PAGE) return;
       const product = normalizedProduct(productName);
       const tank = normalizedTank(tankCode);
       if(!product || !tank) return;
@@ -1815,7 +2220,7 @@
         : 1;
       const tank = normalizedTank(prefill.tankCode ?? "");
       const productName = prefill.productName ?? "";
-      const knownLocation = productName && tank ? await getKnownLocation(productName, tank) : null;
+      const knownLocation = currentPage !== OUTBOUND_PAGE && productName && tank ? await getKnownLocation(productName, tank) : null;
       const newRef = push(dateRef(currentDate));
       await set(newRef, {
         dateText: formatDateThaiLike(currentDate),
@@ -2090,7 +2495,9 @@
       const center = { horizontal:'center', vertical:'center', wrapText:true };
       const left = { horizontal:'left', vertical:'center', wrapText:true };
       const font = { name:'Tahoma', sz:10, color:{rgb:'000000'} };
-      const isPTR = String(page || '').toUpperCase() === 'PTR';
+      const pageCode = String(page || '').toUpperCase();
+      const isPTR = pageCode === 'PTR';
+      const isOUT = pageCode === OUTBOUND_PAGE;
 
       // ใช้ชุดสีเดียวกับหน้าเว็บจริง ไม่อิงสีจากภาพตัวอย่าง
       const palette = isPTR ? {
@@ -2104,6 +2511,17 @@
         locationB:'E6F6CF',
         total:'D9F5DF',
         exportRow:'FFF3A3'
+      } : (isOUT ? {
+        pageBg:'FFF7ED',
+        title:'FFF7ED',
+        header:'FFEDD5',
+        locationHeader:'FBBF24',
+        shadeA:'FFFFFF',
+        shadeB:'FFF7ED',
+        locationA:'FFFBEB',
+        locationB:'FFFBEB',
+        total:'FFEDD5',
+        exportRow:'FFF3A3'
       } : {
         pageBg:'F4F7F9',
         title:'F4F7F9',
@@ -2115,7 +2533,7 @@
         locationB:'FFFBE6',
         total:'BFE8F3',
         exportRow:'FFF3A3'
-      };
+      });
 
       const makeBorder = (groupStart=false, groupEnd=false) => ({
         top:{style:groupStart ? 'medium' : 'thin', color:{rgb:'000000'}},
@@ -2809,9 +3227,57 @@
       return Number.isFinite(n) ? n : s;
     }
 
+    function normalizeInventoryLocationText(value){
+      const raw = String(value ?? '').trim();
+      if(!raw) return '';
+      const text = raw.replace(/^location\s*/i, '').trim();
+      return normalizeLocationPlace(text);
+    }
+
+    function splitBatchTankText(value){
+      const text = String(value ?? '').trim();
+      if(!text) return { batchNo:'', tankCode:'' };
+      const parts = text.split(/[_/]/).map(x => x.trim()).filter(Boolean);
+      if(parts.length >= 2) return { batchNo:parts[0], tankCode:parts.slice(1).join('_') };
+      const m = text.match(/^([A-Z]\d{8})\s+([A-Z]{1,3}\d{4,}[A-Z0-9]*)$/i);
+      if(m) return { batchNo:m[1], tankCode:m[2] };
+      return { batchNo:text, tankCode:'' };
+    }
+
+    function rowFromInventoryCells(cols, carryTripNo=""){
+      if(cols.length < 6) return null;
+      const location = normalizeInventoryLocationText(cols[0]);
+      const firstIsLocation = /^location\b/i.test(String(cols[0] || '')) || !!parseLocationCodeInfo(location) || /^โกดัง|^ส่งออก/i.test(String(cols[0] || '').trim());
+      if(!firstIsLocation) return null;
+      const productName = String(cols[1] ?? '').trim();
+      const qty = cleanNumberText(cols[2]);
+      if(!productName || qty === '' || /^item\s*number$/i.test(productName) || !num(qty)) return null;
+      const uom = String(cols[4] ?? '').trim();
+      const batchCell = String(cols[6] ?? cols[5] ?? '').trim();
+      const { batchNo, tankCode } = splitBatchTankText(batchCell);
+      const qtyNumber = num(qty);
+      const packType = /JB|850/i.test(uom) ? 'JB' : (/PP|25/i.test(uom) ? 'PP' : '');
+      const factor = packType === 'JB' ? 850 : (packType === 'PP' ? 25 : 0);
+      const kg = factor && qtyNumber ? qtyNumber * factor : '';
+      return {
+        tripNo: carryTripNo || '',
+        productName,
+        batchNo,
+        tankCode: normalizedTank(tankCode),
+        bags: qty,
+        kg,
+        pallets:'',
+        packType,
+        remark:[cols[3] ? `Allocate: ${cols[3]}` : '', cols[5] && cols[5] !== batchCell ? cols[5] : ''].filter(Boolean).join(' / ') || 'ส่งออก',
+        location
+      };
+    }
+
     function rowFromCells(cells, carryTripNo=""){
       let cols = cells.map(x => String(x ?? "").trim()).filter((x,i) => x || i === 0);
       if(!cols.length) return null;
+      const inventoryRow = rowFromInventoryCells(cols, carryTripNo);
+      if(inventoryRow) return inventoryRow;
       if(cols[0] === "-" || /^remark$/i.test(cols[0])) return null;
       if(/^date$/i.test(cols[0]) || /^no\.?$/i.test(cols[0])) return null;
 
@@ -2904,7 +3370,7 @@
     async function importCSV(text){
       const rows = parseTransportText(text);
       if(!rows.length){
-        alert("อ่านข้อมูลนำเข้าไม่ได้ กรุณาวางจาก Excel แบบคั่นด้วย Tab หรือเรียงเป็น No, Product, Batch, Tank, Bag, Kg, Pallet, Remark");
+        alert("อ่านข้อมูลนำเข้าไม่ได้ กรุณาวางจาก Excel แบบคั่นด้วย Tab หรือเรียงเป็น No, Product, Batch, Tank, Bag, Kg, Pallet, Remark หรือแบบ Location, Item Number, Qty, UOM, Batch");
         return;
       }
       for(const row of rows){
@@ -3009,6 +3475,14 @@
       if(action === "delete") deleteTodo(id);
     });
 
+    emptyLocationToggleBtn.addEventListener("click", () => {
+      emptyLocationsWidget.classList.toggle("collapsed");
+      const collapsed = emptyLocationsWidget.classList.contains("collapsed");
+      emptyLocationToggleBtn.textContent = collapsed ? "ขยาย" : "ย่อ";
+      localStorage.setItem("knsTransportEmptyLocationsCollapsed", collapsed ? "1" : "0");
+    });
+    emptyLocationCopyBtn.addEventListener("click", copyEmptyLocations);
+
     $("addRowBtn").addEventListener("click", () => addRow());
     $("exportBtn").addEventListener("click", () => {
       if(!rowsCache.length){
@@ -3045,6 +3519,10 @@
     if(localStorage.getItem("knsTransportTodoCollapsed") === "1"){
       todoWidget.classList.add("collapsed");
       todoToggleBtn.textContent = "ขยาย";
+    }
+    if(localStorage.getItem("knsTransportEmptyLocationsCollapsed") === "1"){
+      emptyLocationsWidget.classList.add("collapsed");
+      emptyLocationToggleBtn.textContent = "ขยาย";
     }
 
     dateInput.value = todayLocal();
