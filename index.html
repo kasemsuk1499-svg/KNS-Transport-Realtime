@@ -1,0 +1,3810 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KNS แผนขนย้ายสินค้าแบบเรียลไทม์</title>
+  <style>
+    :root{
+      --bg:#f4f7f9;
+      --card:#ffffff;
+      --line:#c9d4dc;
+      --head:#bfe8f3;
+      --head2:#dff7cf;
+      --accent:#ffe600;
+      --text:#10202a;
+      --muted:#60717c;
+      --danger:#d92d20;
+      --ok:#188038;
+      --blue:#0b72b9;
+      --purple:#7a3ee6;
+      --ptr-bg:#f1fbf4;
+      --ptr-card:#fbfffc;
+      --ptr-line:#b7dec5;
+      --ptr-head:#d9f5df;
+      --ptr-accent:#9fd9ae;
+      --ptr-text:#12301d;
+      --ptr-soft:#eaf8ee;
+      --shadow:0 8px 22px rgba(20,40,60,.10);
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Tahoma, "Noto Sans Thai", Arial, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    header{
+      position:sticky;
+      top:0;
+      z-index:20;
+      background:rgba(255,255,255,.94);
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--line);
+      padding:12px 14px;
+    }
+    .topbar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      max-width:1500px;
+      margin:auto;
+    }
+    h1{
+      margin:0;
+      font-size:clamp(18px,2.4vw,28px);
+      line-height:1.25;
+      text-align:center;
+      flex:1 1 440px;
+    }
+    .controls{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    label{font-size:13px;color:var(--muted)}
+    input, select, textarea, button{
+      font-family:inherit;
+      font-size:14px;
+    }
+    input, select, textarea{
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:8px 9px;
+      background:#fff;
+      min-height:36px;
+    }
+    button{
+      border:0;
+      border-radius:10px;
+      padding:9px 12px;
+      cursor:pointer;
+      color:white;
+      background:var(--blue);
+      box-shadow:0 2px 8px rgba(0,0,0,.12);
+      min-height:36px;
+    }
+    button:hover{filter:brightness(.95)}
+    button.secondary{background:#475467}
+    button.good{background:var(--ok)}
+    button.danger{background:var(--danger)}
+    button.light{
+      background:#eef5f9;
+      color:var(--text);
+      border:1px solid var(--line);
+      box-shadow:none;
+    }
+    .page-tabs{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .page-tab{
+      min-width:86px;
+      background:#eef5f9;
+      color:var(--text);
+      border:1px solid var(--line);
+      box-shadow:none;
+      font-weight:700;
+    }
+    .page-tab.active{
+      color:#fff;
+      background:var(--blue);
+      border-color:var(--blue);
+    }
+    .page-tab[data-page="PTR"].active{
+      background:#75bd86;
+      border-color:#75bd86;
+      color:#0f2f18;
+    }
+    body[data-page="PTR"]{
+      background:linear-gradient(180deg, var(--ptr-bg), #f7fff9);
+      color:var(--ptr-text);
+    }
+    body[data-page="PTR"] header{
+      background:rgba(248,255,250,.94);
+      border-bottom-color:var(--ptr-line);
+    }
+    body[data-page="PTR"] button{
+      background:#68b87b;
+      color:#0f2f18;
+    }
+    body[data-page="PTR"] button.secondary{background:#6f8f78;color:#fff}
+    body[data-page="PTR"] button.good{background:#5fb878;color:#0f2f18}
+    body[data-page="PTR"] button.danger{background:#d92d20;color:#fff}
+    body[data-page="PTR"] button.light,
+    body[data-page="PTR"] .page-tab{
+      background:#f0faf3;
+      border-color:var(--ptr-line);
+      color:#173f24;
+    }
+    body[data-page="PTR"] .stat,
+    body[data-page="PTR"] .panel{
+      background:var(--ptr-card);
+      border-color:var(--ptr-line);
+      box-shadow:0 8px 22px rgba(45,120,70,.10);
+    }
+    body[data-page="PTR"] .panel-head{border-bottom-color:var(--ptr-line)}
+    body[data-page="PTR"] th{background:var(--ptr-head)}
+    body[data-page="PTR"] th.location{background:#c9efb8}
+    body[data-page="PTR"] tr.tank-shade-a td{background:#ffffff}
+    body[data-page="PTR"] tr.tank-shade-b td{background:#dff3e6}
+    body[data-page="PTR"] tr.tank-shade-a td.location-cell{background:#fffbe6}
+    body[data-page="PTR"] tr.tank-shade-b td.location-cell{background:#e6f6cf}
+    body[data-page="PTR"] .location-meta{color:#376b2b}
+    body[data-page="PTR"] input:focus,
+    body[data-page="PTR"] textarea:focus,
+    body[data-page="PTR"] select:focus{
+      outline-color:#63b36f;
+      background:#ffffff;
+    }
+    main{
+      max-width:1500px;
+      margin:16px auto 50px;
+      padding:0 12px;
+    }
+    .status{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(140px,1fr));
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .stat{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:12px;
+      box-shadow:var(--shadow);
+    }
+    .stat b{display:block;font-size:20px;margin-top:4px}
+    .panel{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .panel-head{
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .hint{color:var(--muted);font-size:13px}
+    .table-wrap{
+      width:100%;
+      overflow:auto;
+      max-height:calc(100vh - 230px);
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:1320px;
+      background:white;
+    }
+    th,td{
+      border:1px solid #222;
+      padding:0;
+      text-align:center;
+      vertical-align:middle;
+    }
+    th{
+      position:sticky;
+      top:0;
+      z-index:8;
+      background:var(--head);
+      font-size:13px;
+      padding:8px 6px;
+      white-space:nowrap;
+    }
+    th.location{background:var(--accent)}
+    /* สีพื้นหลังหลัก: สลับตาม Tank code ไม่ใช่สลับตามคัน */
+    tr.tank-shade-a td{background:#ffffff}
+    tr.tank-shade-b td{background:#e9f6fb}
+    tr.tank-shade-a td.location-cell,
+    tr.tank-shade-b td.location-cell{background:#fffbe6}
+    /* แยกคันต่อคันด้วยเส้นทึบหนา */
+    tr.group-start td{border-top:4px solid #111}
+    tr.group-end td{border-bottom:4px solid #111}
+    td.visual-blank input{color:transparent; pointer-events:none}
+    td.visual-blank input:focus{color:var(--text); pointer-events:auto}
+    td input, td textarea, td select{
+      width:100%;
+      border:0;
+      border-radius:0;
+      min-height:38px;
+      background:transparent;
+      text-align:center;
+      padding:6px;
+      outline:2px solid transparent;
+    }
+    td textarea{
+      resize:vertical;
+      min-height:38px;
+      text-align:left;
+      white-space:pre-wrap;
+    }
+    td input:focus, td textarea:focus, td select:focus{
+      outline:2px solid #2e90fa;
+      background:#fff;
+    }
+    .col-date{min-width:100px}
+    .col-trip{width:72px}
+    .col-product{min-width:230px}
+    .col-batch{min-width:150px}
+    .col-tank{min-width:150px}
+    .col-num{min-width:120px}
+    .col-pack{min-width:95px}
+    .col-remark{min-width:260px}
+    .col-location{min-width:150px}
+    .col-actions{min-width:360px}
+    .row-actions{
+      display:flex;
+      gap:5px;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+      padding:5px;
+    }
+    .row-actions button{
+      padding:5px 8px;
+      min-height:28px;
+      font-size:12px;
+      border-radius:8px;
+      box-shadow:none;
+      white-space:nowrap;
+    }
+
+    .trip-status-actions{
+      display:flex;
+      gap:4px;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+      width:100%;
+      padding-top:3px;
+      border-top:1px dashed rgba(0,0,0,.18);
+      margin-top:2px;
+    }
+    .trip-status-actions button{
+      font-weight:800;
+    }
+    .trip-status-actions .status-ok-btn{background:#188038;color:#fff}
+    .trip-status-actions .status-mismatch-btn{background:#d92d20;color:#fff}
+    .trip-status-actions .status-rollover-btn{background:#f79009;color:#111}
+    .trip-status-chip{
+      display:inline-block;
+      width:100%;
+      padding:3px 6px;
+      border-radius:999px;
+      background:#eef5f9;
+      border:1px solid var(--line);
+      color:#344054;
+      font-size:11px;
+      font-weight:900;
+      text-align:center;
+    }
+    /* สถานะจะทำให้แถบสลับตาม Tank code เข้มขึ้นเล็กน้อย แต่ไม่ลบการสลับสีเดิม */
+    tr.trip-status-ok.tank-shade-a td{background:#e3f8ea !important}
+    tr.trip-status-ok.tank-shade-b td{background:#c8f0d6 !important}
+    tr.trip-status-mismatch.tank-shade-a td{background:#ffe8ec !important}
+    tr.trip-status-mismatch.tank-shade-b td{background:#ffd1da !important}
+    tr.trip-status-rollover.tank-shade-a td{background:#fff2c9 !important}
+    tr.trip-status-rollover.tank-shade-b td{background:#ffe4a3 !important}
+    tr.trip-status-ok td.location-cell{background:#dbf7e5 !important}
+    tr.trip-status-mismatch td.location-cell{background:#ffe1e7 !important}
+    tr.trip-status-rollover td.location-cell{background:#ffedbd !important}
+    tr.trip-status-ok input,
+    tr.trip-status-ok textarea,
+    tr.trip-status-ok select,
+    tr.trip-status-mismatch input,
+    tr.trip-status-mismatch textarea,
+    tr.trip-status-mismatch select,
+    tr.trip-status-rollover input,
+    tr.trip-status-rollover textarea,
+    tr.trip-status-rollover select{
+      background:transparent !important;
+    }
+    tr.trip-status-ok td:first-child{box-shadow:inset 6px 0 0 #12b76a}
+    tr.trip-status-mismatch td:first-child{box-shadow:inset 6px 0 0 #f04438}
+    tr.trip-status-rollover td:first-child{box-shadow:inset 6px 0 0 #f79009}
+    body[data-page="PTR"] .trip-status-actions .status-ok-btn{background:#188038;color:#fff}
+    body[data-page="PTR"] .trip-status-actions .status-mismatch-btn{background:#d92d20;color:#fff}
+    body[data-page="PTR"] .trip-status-actions .status-rollover-btn{background:#f79009;color:#111}
+
+    .product-input{
+      text-align:left;
+      padding-left:10px;
+    }
+    .location-cell{
+      position:relative;
+      min-width:170px;
+      background:#fffde8;
+      transition:background-color .2s ease;
+    }
+    .location-cell input,
+    .location-cell textarea{
+      font-weight:700;
+    }
+    .location-editor{
+      padding:4px;
+      min-width:230px;
+    }
+    .location-textarea{
+      display:block;
+      min-height:58px;
+      line-height:1.35;
+      text-align:left !important;
+      white-space:pre-wrap;
+      padding:7px 8px !important;
+      border:0;
+      border-radius:8px;
+      background:rgba(255,255,255,.35) !important;
+    }
+    .location-cell .location-meta{
+      position:static;
+      display:block;
+      margin-top:3px;
+      padding:0 2px;
+      white-space:normal;
+      overflow:visible;
+      text-overflow:clip;
+      text-align:left;
+    }
+    tr.export-row td{
+      background:#fff3a3 !important;
+    }
+    tr.export-row input,
+    tr.export-row textarea,
+    tr.export-row select{
+      background:#fff3a3 !important;
+    }
+    .location-cell.location-export input{
+      color:#d92d20;
+      font-weight:900;
+    }
+    .location-cell.location-export .location-meta{
+      color:#9a3412;
+      font-weight:700;
+    }
+    .location-meta{
+      position:absolute;
+      left:5px;
+      right:5px;
+      bottom:2px;
+      font-size:10px;
+      color:#6b5b00;
+      line-height:1.15;
+      pointer-events:none;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .location-updated{
+      animation: locationPulse 1.4s ease-in-out infinite;
+      box-shadow: inset 0 0 0 3px #f79009;
+    }
+    .location-updated input{
+      background:transparent !important;
+    }
+    .location-merged-note{
+      display:inline-block;
+      margin-top:2px;
+      padding:2px 6px;
+      border-radius:999px;
+      background:var(--location-meta-bg, #fff0b3);
+      color:#7a4b00;
+      font-size:10px;
+      font-weight:700;
+    }
+    @keyframes locationPulse{
+      0%,100%{box-shadow: inset 0 0 0 3px #f79009;}
+      50%{box-shadow: inset 0 0 0 3px #fdb022, 0 0 16px rgba(247,144,9,.45);}
+    }
+    .dirty{
+      outline:2px solid #fdb022 !important;
+      background:#fff7dc !important;
+    }
+    .saving{
+      outline:2px solid #2e90fa !important;
+      background:#eef6ff !important;
+    }
+    .saved-flash{
+      animation: savedFlash .75s ease-out 1;
+    }
+    @keyframes savedFlash{
+      0%{background:#dcfae6; outline:2px solid #12b76a;}
+      100%{background:transparent; outline:2px solid transparent;}
+    }
+    .sync-dot{
+      display:inline-flex;
+      width:10px;height:10px;
+      border-radius:50%;
+      background:#aaa;
+      margin-right:6px;
+      vertical-align:middle;
+    }
+    .sync-dot.online{background:#12b76a}
+    .sync-dot.offline{background:#f04438}
+    dialog{
+      width:min(720px,95vw);
+      border:0;
+      border-radius:16px;
+      padding:0;
+      box-shadow:0 18px 60px rgba(0,0,0,.25);
+    }
+    dialog::backdrop{background:rgba(0,0,0,.35)}
+    .dialog-body{padding:16px}
+    .dialog-body textarea{width:100%;height:250px;text-align:left}
+    .dialog-head{
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      font-weight:700;
+    }
+    .dialog-foot{
+      padding:12px 16px;
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+      border-top:1px solid var(--line);
+    }
+
+    .todo-widget{
+      position:fixed;
+      left:12px;
+      top:96px;
+      z-index:30;
+      width:320px;
+      max-width:calc(100vw - 24px);
+      background:rgba(255,255,255,.96);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 12px 34px rgba(20,40,60,.18);
+      overflow:hidden;
+      backdrop-filter:blur(10px);
+    }
+    .todo-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:10px 12px;
+      background:#eef8fc;
+      border-bottom:1px solid var(--line);
+    }
+    .todo-title{
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      white-space:nowrap;
+    }
+    .todo-count{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:32px;
+      height:22px;
+      padding:0 7px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+    }
+    .todo-toggle{
+      min-height:28px;
+      padding:4px 8px;
+      border-radius:8px;
+      box-shadow:none;
+      background:#475467;
+      color:#fff;
+      font-size:12px;
+    }
+    .todo-body{
+      padding:10px;
+      max-height:calc(100vh - 135px);
+      overflow:auto;
+    }
+    .todo-add{
+      display:grid;
+      grid-template-columns:1fr 108px auto;
+      gap:6px;
+      margin-bottom:10px;
+    }
+    .todo-add input,
+    .todo-add select{
+      min-height:32px;
+      font-size:12px;
+      padding:6px 7px;
+      border-radius:8px;
+    }
+    .todo-add button{
+      min-height:32px;
+      padding:5px 8px;
+      border-radius:8px;
+      font-size:12px;
+      box-shadow:none;
+      white-space:nowrap;
+    }
+    .todo-section{
+      border:1px solid var(--line);
+      border-radius:12px;
+      overflow:hidden;
+      margin-top:8px;
+      background:#fff;
+    }
+    .todo-section-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:7px 9px;
+      font-weight:900;
+      font-size:13px;
+      background:#f6f9fb;
+      border-bottom:1px solid var(--line);
+    }
+    .todo-section-title .badge{
+      min-width:24px;
+      text-align:center;
+      border-radius:999px;
+      padding:1px 6px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:var(--muted);
+      font-size:11px;
+    }
+    .todo-section[data-cat="ด่วน!!"] .todo-section-title{
+      background:#fff1f0;
+      color:#b42318;
+    }
+    .todo-section[data-cat="เตรียมไว้ตอนเย็น"] .todo-section-title{
+      background:#f5f0ff;
+      color:#5b2db5;
+    }
+    .todo-list{
+      display:flex;
+      flex-direction:column;
+      gap:0;
+    }
+    .todo-item{
+      display:grid;
+      grid-template-columns:24px 1fr auto;
+      gap:6px;
+      align-items:start;
+      padding:8px 8px;
+      border-bottom:1px solid #eef2f4;
+    }
+    .todo-item:last-child{border-bottom:0}
+    .todo-item input[type="checkbox"]{
+      width:18px;
+      height:18px;
+      min-height:18px;
+      margin:2px 0 0;
+      accent-color:var(--ok);
+    }
+    .todo-text{
+      text-align:left;
+      line-height:1.35;
+      font-size:13px;
+      word-break:break-word;
+    }
+    .todo-item.done .todo-text{
+      color:#98a2b3;
+      text-decoration:line-through;
+    }
+    .todo-actions{
+      display:flex;
+      gap:4px;
+    }
+    .todo-actions button{
+      min-height:24px;
+      padding:3px 6px;
+      border-radius:7px;
+      box-shadow:none;
+      font-size:11px;
+      white-space:nowrap;
+    }
+    .todo-actions .todo-edit{background:#667085;color:#fff}
+    .todo-actions .todo-del{background:#d92d20;color:#fff}
+    .todo-empty{
+      padding:8px;
+      color:var(--muted);
+      font-size:12px;
+      text-align:center;
+    }
+    .todo-widget.collapsed .todo-body{display:none}
+    body[data-page="PTR"] .todo-widget{
+      background:rgba(251,255,252,.96);
+      border-color:var(--ptr-line);
+      box-shadow:0 12px 34px rgba(45,120,70,.16);
+    }
+    body[data-page="PTR"] .todo-head{background:#f0faf3;border-bottom-color:var(--ptr-line)}
+    body[data-page="PTR"] .todo-section{border-color:var(--ptr-line)}
+    body[data-page="PTR"] .todo-toggle{background:#6f8f78;color:#fff}
+    body[data-page="PTR"] .todo-actions .todo-edit{background:#6f8f78;color:#fff}
+
+
+    .empty-locations-widget{
+      position:fixed;
+      right:12px;
+      top:96px;
+      z-index:30;
+      width:360px;
+      max-width:calc(100vw - 24px);
+      background:rgba(255,255,255,.97);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 12px 34px rgba(20,40,60,.18);
+      overflow:hidden;
+      backdrop-filter:blur(10px);
+    }
+    .empty-locations-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:10px 12px;
+      background:#fff8db;
+      border-bottom:1px solid var(--line);
+    }
+    .empty-locations-title{
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      white-space:nowrap;
+    }
+    .empty-locations-count{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:32px;
+      height:22px;
+      padding:0 7px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:#7a4b00;
+      font-size:12px;
+      font-weight:900;
+    }
+    .empty-locations-toggle,
+    .empty-locations-copy{
+      min-height:28px;
+      padding:4px 8px;
+      border-radius:8px;
+      box-shadow:none;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .empty-locations-toggle{background:#475467;color:#fff}
+    .empty-locations-copy{background:#f79009;color:#111;font-weight:900}
+    .empty-locations-actions{display:flex;gap:6px;align-items:center}
+    .empty-manual-add{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:6px;
+      margin:8px 0 6px;
+    }
+    .empty-manual-add input{
+      min-height:32px;
+      font-size:12px;
+      padding:6px 8px;
+      border-radius:8px;
+    }
+    .empty-manual-add button{
+      min-height:32px;
+      padding:5px 8px;
+      border-radius:8px;
+      font-size:12px;
+      box-shadow:none;
+      background:#f79009;
+      color:#111;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .empty-manual-note{
+      color:#9a5a10;
+      font-size:11px;
+      line-height:1.35;
+      margin:0 0 8px;
+      text-align:left;
+    }
+    .empty-locations-body{
+      padding:10px;
+      max-height:calc(100vh - 135px);
+      overflow:auto;
+    }
+    .empty-locations-hint{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.35;
+      margin:0 0 8px;
+      text-align:left;
+    }
+    .empty-zone{
+      border:1px solid var(--line);
+      border-radius:12px;
+      overflow:hidden;
+      margin-top:8px;
+      background:#fff;
+    }
+    .empty-zone-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:7px 9px;
+      font-weight:900;
+      font-size:13px;
+      background:#f6f9fb;
+      border-bottom:1px solid var(--line);
+    }
+    .empty-zone-title .badge{
+      min-width:24px;
+      text-align:center;
+      border-radius:999px;
+      padding:1px 6px;
+      background:#fff;
+      border:1px solid var(--line);
+      color:#7a4b00;
+      font-size:11px;
+      font-weight:900;
+    }
+    .empty-zone[data-zone="A"] .empty-zone-title{background:#e8f7ff;color:#075985}
+    .empty-zone[data-zone="B"] .empty-zone-title{background:#effcf3;color:#166534}
+    .empty-zone[data-zone="C"] .empty-zone-title{background:#fff7ed;color:#9a3412}
+    .empty-zone[data-zone="D"] .empty-zone-title{background:#f5f3ff;color:#5b21b6}
+    .empty-location-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      padding:8px;
+      min-height:38px;
+    }
+    .empty-location-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      border-radius:999px;
+      border:1px solid #facc15;
+      background:#fffbeb;
+      color:#713f12;
+      padding:5px 8px;
+      font-size:12px;
+      font-weight:900;
+      cursor:help;
+    }
+    .empty-location-chip .remain{font-weight:700;color:#9a3412;font-size:11px}
+    .empty-location-chip.manual{
+      border-color:#fb923c;
+      background:#fff7ed;
+      color:#7c2d12;
+      cursor:default;
+    }
+    .empty-location-chip .manual-tag{
+      font-size:10px;
+      font-weight:900;
+      color:#c2410c;
+    }
+    .empty-location-chip .manual-del{
+      border:0;
+      background:#d92d20;
+      color:#fff;
+      border-radius:999px;
+      width:18px;
+      height:18px;
+      min-height:18px;
+      padding:0;
+      line-height:18px;
+      font-size:11px;
+      box-shadow:none;
+    }
+    .location-cell.location-used-by-outbound{
+      background:#ffedd5 !important;
+      box-shadow:inset 0 0 0 3px #f79009;
+    }
+    .location-cell.location-used-by-outbound .location-textarea{
+      background:#fff7ed !important;
+    }
+    .location-used-note{
+      display:inline-block;
+      margin-top:2px;
+      padding:2px 6px;
+      border-radius:999px;
+      background:#fed7aa;
+      color:#9a3412;
+      font-size:10px;
+      font-weight:900;
+    }
+    .empty-zone-empty{
+      padding:8px;
+      color:var(--muted);
+      font-size:12px;
+      text-align:center;
+      width:100%;
+    }
+    .empty-locations-widget.collapsed .empty-locations-body{display:none}
+    body[data-page="OUT"]{
+      background:linear-gradient(180deg, #fff7ed, #fffaf2);
+      color:#351b05;
+    }
+    body[data-page="OUT"] header{
+      background:rgba(255,250,242,.94);
+      border-bottom-color:#fed7aa;
+    }
+    .page-tab[data-page="OUT"].active,
+    body[data-page="OUT"] button{
+      background:#f79009;
+      border-color:#f79009;
+      color:#111;
+    }
+    body[data-page="OUT"] button.secondary{background:#9a5a10;color:#fff}
+    body[data-page="OUT"] button.good{background:#f79009;color:#111}
+    body[data-page="OUT"] button.danger{background:#d92d20;color:#fff}
+    body[data-page="OUT"] button.light,
+    body[data-page="OUT"] .page-tab{
+      background:#fff7ed;
+      border-color:#fed7aa;
+      color:#7c2d12;
+    }
+    body[data-page="OUT"] .stat,
+    body[data-page="OUT"] .panel,
+    body[data-page="OUT"] .todo-widget,
+    body[data-page="OUT"] .empty-locations-widget{
+      background:rgba(255,255,255,.97);
+      border-color:#fed7aa;
+      box-shadow:0 8px 22px rgba(154,90,16,.12);
+    }
+    body[data-page="OUT"] .panel-head,
+    body[data-page="OUT"] .todo-head,
+    body[data-page="OUT"] .empty-locations-head{border-bottom-color:#fed7aa}
+    body[data-page="OUT"] th{background:#ffedd5}
+    body[data-page="OUT"] th.location{background:#fbbf24}
+    body[data-page="OUT"] tr.tank-shade-b td{background:#fff7ed}
+    body[data-page="OUT"] tr.tank-shade-a td.location-cell,
+    body[data-page="OUT"] tr.tank-shade-b td.location-cell{background:#fffbeb}
+
+    @media (max-width:760px){
+      .todo-widget,
+      .empty-locations-widget{position:relative;top:auto;left:auto;right:auto;width:auto;margin:12px 0;z-index:1}
+      .todo-body,
+      .empty-locations-body{max-height:none}
+      .todo-add{grid-template-columns:1fr}
+      header{position:relative}
+      h1{text-align:left;font-size:18px}
+      .status{grid-template-columns:repeat(2,1fr)}
+      .controls{width:100%}
+      .controls > *{flex:1 1 auto}
+      .table-wrap{max-height:none}
+      .hint{font-size:12px}
+      button{padding:9px 10px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>แผนการขนย้ายสินค้าไปคลังสินค้าด้านนอก (KNS)</h1>
+      <div class="controls">
+        <div class="page-tabs" aria-label="เลือกหน้า">
+          <button class="page-tab active" data-page="STP" type="button">STP</button>
+          <button class="page-tab" data-page="PTR" type="button">PTR</button>
+          <button class="page-tab" data-page="OUT" type="button">ส่งออก</button>
+        </div>
+        <label>วันที่
+          <input type="date" id="dateInput" />
+        </label>
+        <button id="addRowBtn" class="good">+ เพิ่มคันท้ายสุด</button>
+        <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
+        <button id="importBtn" class="light">นำเข้า CSV</button>
+        <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
+        <button id="exportPlanExcelBtn" class="light">ส่งออก Excel ตามสีหน้าเว็บ</button>
+        <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
+        <button id="exportBalanceExcelBtn" class="light">Export Excel Balance</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <aside class="todo-widget" id="todoWidget" aria-label="To Do List ประจำวัน">
+      <div class="todo-head">
+        <div class="todo-title">☑ To Do List รวม STP/PTR/ส่งออก <span class="todo-count" id="todoCount">0/0</span></div>
+        <button class="todo-toggle" id="todoToggleBtn" type="button">ย่อ</button>
+      </div>
+      <div class="todo-body">
+        <div class="todo-add">
+          <input id="todoTextInput" type="text" placeholder="เพิ่มงานใหม่..." />
+          <select id="todoCategoryInput">
+            <option value="ด่วน!!">ด่วน!!</option>
+            <option value="ระหว่างวัน" selected>ระหว่างวัน</option>
+            <option value="เตรียมไว้ตอนเย็น">เตรียมไว้ตอนเย็น</option>
+          </select>
+          <button id="todoAddBtn" class="good" type="button">+ เพิ่ม</button>
+        </div>
+        <div id="todoLists"></div>
+      </div>
+    </aside>
+
+    <aside class="empty-locations-widget" id="emptyLocationsWidget" aria-label="โลเคชั่นว่างประจำวัน">
+      <div class="empty-locations-head">
+        <div class="empty-locations-title">📦 โลว่างวันนี้ <span class="empty-locations-count" id="emptyLocationCount">0</span></div>
+        <div class="empty-locations-actions">
+          <button class="empty-locations-copy" id="emptyLocationCopyBtn" type="button">คัดลอก</button>
+          <button class="empty-locations-toggle" id="emptyLocationToggleBtn" type="button">ย่อ</button>
+        </div>
+      </div>
+      <div class="empty-locations-body">
+        <p class="empty-locations-hint">คำนวณจาก STP + PTR ลบด้วยหน้า “ส่งออก” ของวันที่เลือก ถ้าคงเหลือของโลนั้นเป็น 0 หรือติดลบ ระบบจะดึงเป็นโลว่างให้อัตโนมัติ</p>
+        <div class="empty-manual-add">
+          <input id="emptyLocationManualInput" type="text" placeholder="พิมพ์โลว่างเอง เช่น 1A-02, 2B45" />
+          <button id="emptyLocationManualAddBtn" type="button">+ เพิ่มมือ</button>
+        </div>
+        <p class="empty-manual-note">รายการที่เพิ่มมือจะถูกซิงก์ตามวันที่ และถูกรวมในปุ่มคัดลอกด้วย</p>
+        <div id="emptyLocationLists"></div>
+      </div>
+    </aside>
+    <section class="status">
+      <div class="stat"><span>จำนวนเที่ยวรถ</span><b id="totalTrips">0</b></div>
+      <div class="stat"><span>จำนวนถุงรวม</span><b id="totalBags">0</b></div>
+      <div class="stat"><span>น้ำหนักรวม Kg</span><b id="totalKg">0.00</b></div>
+      <div class="stat"><span>จำนวนพาเลทรวม</span><b id="totalPallets">0</b></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <span id="syncDot" class="sync-dot"></span>
+          <b id="syncText">กำลังเชื่อมต่อ...</b>
+          <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — พิมพ์ให้เสร็จก่อน แล้วกด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึกและซิงก์เรียลไทม์</span>
+        </div>
+        <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • Product พิมพ์ค้นหาเลือกจากฐาน CSV ได้ • ช่อง LOCATION พิมพ์เองได้อิสระ • ช่องสีเหลืองอ่อน = ยังไม่บันทึก</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-trip">No.</th>
+              <th class="col-product">Product name</th>
+              <th class="col-batch">Batch No.</th>
+              <th class="col-tank">Tank code</th>
+              <th class="col-num">Quantity (bag)</th>
+              <th class="col-num">Quantity (Kg)</th>
+              <th class="col-num">Quantity (pallet)</th>
+              <th class="col-pack">PP/JB</th>
+              <th class="col-remark">Remark</th>
+              <th class="col-location location">LOCATION</th>
+              <th class="col-actions">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+        <datalist id="productList"></datalist>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="importDialog">
+    <div class="dialog-head">นำเข้าข้อมูล CSV</div>
+    <div class="dialog-body">
+      <p class="hint">
+        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้า และคำนวณ PP/JB จาก Quantity (Kg) ÷ Quantity (bag) ให้อัตโนมัติ สำหรับหน้า “ส่งออก” รองรับรูปแบบ Booking: Location, Item Number, Qty, Qty Allocate, UOM, Status, Batch โดย Qty Allocate เช่น 1(20) 2(20) จะถูกแยกเป็นคันส่งออกตามเลขหน้าวงเล็บ และใช้จำนวนในวงเล็บเป็นจำนวนที่ตัดจริง
+      </p>
+      <textarea id="csvInput" placeholder="ตัวอย่าง:
+1	STAB-A T0170	A26060723	A070725A4	960	24,000.00	16	Plastic pallet (60)
+	STAB-A T0170	A26060723	A070724A8	120	3,000.00	2	Plastic pallet (60)"></textarea>
+    </div>
+    <div class="dialog-foot">
+      <button id="cancelImportBtn" class="light">ยกเลิก</button>
+      <button id="confirmImportBtn" class="good">นำเข้า</button>
+    </div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <script type="module">
+    /*
+      วิธีใช้ Firebase:
+      1) เข้า https://console.firebase.google.com แล้วสร้าง Project
+      2) สร้าง Realtime Database เลือกโซน asia-southeast1 หรือใกล้ที่สุด
+      3) ที่ Project settings > Web app คัดลอก firebaseConfig มาแทนค่าด้านล่าง
+      4) ตั้ง Rules ชั่วคราวให้ทุกคนแก้ได้:
+      {
+        "rules": {
+          "knsTransport": {
+            ".read": true,
+            ".write": true
+          }
+        }
+      }
+      หมายเหตุ: ถ้าใช้งานจริงในบริษัท ควรเพิ่ม Login และจำกัดสิทธิ์ภายหลัง
+    */
+
+    // ปิดระบบแจ้งเตือน/บล็อก Location แบบบังคับทั้งหมด
+    // ช่อง Location ต้องพิมพ์หมายเหตุได้อิสระ เช่น B39, เช็คแล้ว, รอโกดังใหม่ ฯลฯ
+    const originalAlert = window.alert.bind(window);
+    window.alert = (message) => {
+      const text = String(message ?? "");
+      if(text.includes("โลเคชั่นนี้ไม่มีในระบบ") || text.includes("ใช้ได้เฉพาะ")){
+        console.warn("Location validation popup suppressed:", text);
+        return;
+      }
+      originalAlert(message);
+    };
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getDatabase, ref, onValue, push, set, update, remove, serverTimestamp,
+      onDisconnect, get
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCr3wjsWr8Op2I8QovVe7fUppthhHfyVa0",
+      authDomain: "gacha-7a14f.firebaseapp.com",
+      databaseURL: "https://gacha-7a14f-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "gacha-7a14f",
+      storageBucket: "gacha-7a14f.firebasestorage.app",
+      messagingSenderId: "1014868346199",
+      appId: "1:1014868346199:web:cf9c02eddd9c99504daa12"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const $ = (id) => document.getElementById(id);
+    const dateInput = $("dateInput");
+    const tbody = $("tbody");
+    const pageName = $("pageName");
+    const pageTabs = Array.from(document.querySelectorAll(".page-tab"));
+    const syncDot = $("syncDot");
+    const syncText = $("syncText");
+    const todoWidget = $("todoWidget");
+    const todoLists = $("todoLists");
+    const todoTextInput = $("todoTextInput");
+    const todoCategoryInput = $("todoCategoryInput");
+    const todoAddBtn = $("todoAddBtn");
+    const todoToggleBtn = $("todoToggleBtn");
+    const todoCount = $("todoCount");
+    const emptyLocationsWidget = $("emptyLocationsWidget");
+    const emptyLocationLists = $("emptyLocationLists");
+    const emptyLocationCount = $("emptyLocationCount");
+    const emptyLocationToggleBtn = $("emptyLocationToggleBtn");
+    const emptyLocationCopyBtn = $("emptyLocationCopyBtn");
+    const emptyLocationManualInput = $("emptyLocationManualInput");
+    const emptyLocationManualAddBtn = $("emptyLocationManualAddBtn");
+
+    let currentDate = "";
+    let currentPage = localStorage.getItem("knsTransportPage") || "STP";
+    let unsubscribe = null;
+    let tankLocationUnsubscribe = null;
+    let productOptionsUnsubscribe = null;
+    let todoUnsubscribe = null;
+    let rowsCache = [];
+    let tankLocationCache = {};
+    let productOptionsCache = {};
+    let saveTimers = new Map();
+    let locationSyncTimer = null;
+    let emptyLocationRowsByPage = {};
+    let emptyLocationUnsubscribes = [];
+    let manualEmptyLocations = [];
+    let emptyLocationSummary = { total:0, zones:{ A:[], B:[], C:[], D:[] } };
+
+    // เรียงหมวดให้ “ด่วน!!” อยู่บนสุดเสมอ และใช้ To Do ชุดเดียวร่วมกันทั้ง STP/PTR ตามวันที่
+    const TODO_CATEGORIES = ["ด่วน!!", "ระหว่างวัน", "เตรียมไว้ตอนเย็น"];
+    const DEFAULT_TODOS = [
+      { text:"เช็กจำนวนพาเลทส่งแจ้งเซลล์", category:"ระหว่างวัน" },
+      { text:"ทำแผนปริ้นให้หน้างานและโฟล์กลิฟ", category:"ระหว่างวัน" },
+      { text:"แจ้งแผนลงในไลน์กลุ่มรับเข้า", category:"ระหว่างวัน" },
+      { text:"ทำหัวรับเข้า", category:"ระหว่างวัน" },
+      { text:"ตัดพาเลทหรืองานคืนเมื่อวาน", category:"ระหว่างวัน" },
+      { text:"เช็คและเตรียมพาเลทคืนSTP", category:"ระหว่างวัน" },
+      { text:"เขียนมือแยกตั๋ว", category:"ระหว่างวัน" },
+      { text:"รับงานเข้าระบบและส่งรีพอทเรียบร้อย", category:"ระหว่างวัน" },
+      { text:"เช็กเมลก่อนกลับบ้านว่ามีขอแป้งคืนหรือแผนแซมไหม", category:"เตรียมไว้ตอนเย็น" },
+      { text:"เช็คโลว่างก่อนกลับ", category:"เตรียมไว้ตอนเย็น" }
+    ];
+    let todoItems = [];
+
+    const OUTBOUND_PAGE = "OUT";
+    const BALANCE_SOURCE_PAGES = ["STP", "PTR"];
+    const EMPTY_LOCATION_ZONES = ["A", "B", "C", "D"];
+    const PAGE_LABELS = { STP:"STP", PTR:"PTR", OUT:"ส่งออก" };
+
+    const fields = [
+      "tripNo","productName","batchNo","tankCode",
+      "bags","kg","pallets","packType","remark","location"
+    ];
+
+    const TRIP_STATUS = {
+      ok: { label:"บอกงานตรงแผนเรียบร้อย", short:"ตรงแผนเรียบร้อย", className:"trip-status-ok" },
+      mismatch: { label:"งานไม่ตรงแผน", short:"งานไม่ตรงแผน", className:"trip-status-mismatch" },
+      rollover: { label:"เลื่อนไปลงพรุ่งนี้", short:"เลื่อนไปลงพรุ่งนี้ / คันตกค้าง", className:"trip-status-rollover" }
+    };
+
+
+    function todoStorageKey(){
+      // เก็บสำรองในเครื่องไว้เผื่อกรณีออฟไลน์ แต่ข้อมูลหลักจะอยู่บน Firebase
+      return `knsTransportTodo/shared/${currentDate}`;
+    }
+
+    function legacyTodoStorageKey(page){
+      return `knsTransportTodo/${page}/${currentDate}`;
+    }
+
+    function readTodoListFromStorage(key){
+      try{
+        const value = JSON.parse(localStorage.getItem(key) || "null");
+        return Array.isArray(value) ? value : null;
+      }catch(_){
+        return null;
+      }
+    }
+
+    function makeTodoId(){
+      return `todo_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    }
+
+    function normalizeTodoCategory(category){
+      return TODO_CATEGORIES.includes(category) ? category : "ระหว่างวัน";
+    }
+
+    function defaultTodoItems(){
+      return DEFAULT_TODOS.map((item, index) => ({
+        id:`default_${index + 1}`,
+        text:item.text,
+        category:normalizeTodoCategory(item.category),
+        done:false,
+        fixed:true,
+        createdAt:index + 1,
+        updatedAt:index + 1
+      }));
+    }
+
+    function todoItemsRef(date=currentDate){
+      // ใช้ path กลางตามวันที่ ไม่แยก STP/PTR เพื่อให้ทุกหน้าและทุกคนเห็น To Do ชุดเดียวกัน
+      return ref(db, `knsTransport/todos/shared/${date}/items`);
+    }
+
+    function todoItemRef(id){
+      return ref(db, `knsTransport/todos/shared/${currentDate}/items/${id}`);
+    }
+
+    function normalizeTodoItem(item, fallbackId){
+      return {
+        id:String(item?.id || fallbackId || makeTodoId()),
+        text:String(item?.text || '').trim() || 'งานใหม่',
+        category:normalizeTodoCategory(item?.category),
+        done:!!item?.done,
+        fixed:!!item?.fixed,
+        createdAt:item?.createdAt || Date.now(),
+        updatedAt:item?.updatedAt || Date.now()
+      };
+    }
+
+    function sortTodoItems(items){
+      const catIndex = (cat) => TODO_CATEGORIES.indexOf(normalizeTodoCategory(cat));
+      return [...items].sort((a,b) => {
+        const ca = catIndex(a.category), cb = catIndex(b.category);
+        if(ca !== cb) return ca - cb;
+        return Number(a.createdAt || 0) - Number(b.createdAt || 0);
+      });
+    }
+
+    function mergedLocalTodoItems(){
+      const key = todoStorageKey();
+      let saved = readTodoListFromStorage(key);
+
+      // ย้ายข้อมูลเก่าที่เคยแยก STP/PTR มาใช้ร่วมกันอัตโนมัติ โดยไม่ทำให้รายการเดิมหาย
+      if(!saved){
+        const legacyItems = [
+          ...(readTodoListFromStorage(legacyTodoStorageKey("STP")) || []),
+          ...(readTodoListFromStorage(legacyTodoStorageKey("PTR")) || [])
+        ];
+        if(legacyItems.length){
+          const mergedById = new Map();
+          for(const item of legacyItems){
+            if(!item) continue;
+            const id = item.id || makeTodoId();
+            const previous = mergedById.get(id);
+            mergedById.set(id, {
+              ...(previous || {}),
+              ...item,
+              id,
+              done: !!item.done || !!previous?.done
+            });
+          }
+          saved = Array.from(mergedById.values());
+          localStorage.setItem(key, JSON.stringify(saved));
+        }
+      }
+
+      if(Array.isArray(saved)){
+        const byId = new Map(saved.map(item => [item.id, item]));
+        const mergedDefaults = defaultTodoItems().map(item => ({ ...item, ...(byId.get(item.id) || {}) }));
+        const customItems = saved.filter(item => item && !String(item.id || '').startsWith('default_'));
+        return [...mergedDefaults, ...customItems].map((item, index) => normalizeTodoItem(item, item.id || `local_${index}`));
+      }
+      return defaultTodoItems();
+    }
+
+    async function seedTodosIfEmpty(){
+      const items = mergedLocalTodoItems();
+      const updates = {};
+      for(const item of items){
+        updates[item.id] = {
+          ...item,
+          synced:true,
+          updatedAt: serverTimestamp()
+        };
+      }
+      await update(todoItemsRef(), updates);
+    }
+
+    function listenTodos(){
+      if(todoUnsubscribe) todoUnsubscribe();
+      todoItems = [];
+      renderTodos();
+
+      todoUnsubscribe = onValue(todoItemsRef(), async (snap) => {
+        const raw = snap.val();
+
+        // ถ้าวันนี้ยังไม่มี To Do บน Firebase ให้สร้างชุดเริ่มต้น/ย้ายของเก่าขึ้น Firebase หนึ่งครั้ง
+        if(!raw){
+          await seedTodosIfEmpty();
+          return;
+        }
+
+        todoItems = sortTodoItems(Object.entries(raw).map(([id, item]) => normalizeTodoItem(item, id)));
+        localStorage.setItem(todoStorageKey(), JSON.stringify(todoItems)); // สำรองไว้ เผื่อเน็ตหลุด
+        renderTodos();
+      }, (err) => {
+        console.error(err);
+        // ถ้าอ่าน Firebase ไม่ได้ ให้ fallback เป็นข้อมูลสำรองในเครื่อง เพื่อไม่ให้หน้าใช้งานไม่ได้
+        todoItems = sortTodoItems(mergedLocalTodoItems());
+        renderTodos();
+      });
+    }
+
+    function renderTodos(){
+      if(!todoLists) return;
+      const done = todoItems.filter(item => item.done).length;
+      todoCount.textContent = `${done}/${todoItems.length}`;
+      todoLists.innerHTML = TODO_CATEGORIES.map(category => {
+        const items = todoItems.filter(item => item.category === category);
+        const remain = items.filter(item => !item.done).length;
+        const body = items.length ? items.map(item => `
+          <div class="todo-item ${item.done ? 'done' : ''}" data-todo-id="${escapeAttr(item.id)}">
+            <input type="checkbox" data-todo-action="toggle" ${item.done ? 'checked' : ''} aria-label="ทำเสร็จแล้ว" />
+            <div class="todo-text">${escapeHtml(item.text)}</div>
+            <div class="todo-actions">
+              <button type="button" class="todo-edit" data-todo-action="edit">แก้</button>
+              <button type="button" class="todo-del" data-todo-action="delete">ลบ</button>
+            </div>
+          </div>
+        `).join('') : `<div class="todo-empty">ยังไม่มีรายการในหมวดนี้</div>`;
+        return `
+          <section class="todo-section" data-cat="${escapeAttr(category)}">
+            <div class="todo-section-title"><span>${escapeHtml(category)}</span><span class="badge">${remain}</span></div>
+            <div class="todo-list">${body}</div>
+          </section>
+        `;
+      }).join('');
+    }
+
+    async function addTodo(){
+      const text = String(todoTextInput.value || '').trim();
+      if(!text){ todoTextInput.focus(); return; }
+      const newRef = push(todoItemsRef());
+      todoTextInput.value = '';
+      await set(newRef, {
+        id:newRef.key,
+        text,
+        category:normalizeTodoCategory(todoCategoryInput.value),
+        done:false,
+        fixed:false,
+        createdAt:serverTimestamp(),
+        updatedAt:serverTimestamp()
+      });
+      todoTextInput.focus();
+    }
+
+    async function editTodo(id){
+      const item = todoItems.find(x => x.id === id);
+      if(!item) return;
+      const nextText = prompt('แก้ไขรายการ To Do', item.text);
+      if(nextText === null) return;
+      const cleanText = String(nextText || '').trim();
+      if(!cleanText) return;
+      const nextCategory = prompt('ใส่หมวด: ระหว่างวัน / เตรียมไว้ตอนเย็น / ด่วน!!', item.category);
+      await update(todoItemRef(id), {
+        text:cleanText,
+        category:normalizeTodoCategory(String(nextCategory || item.category).trim()),
+        updatedAt:serverTimestamp()
+      });
+    }
+
+    async function deleteTodo(id){
+      const item = todoItems.find(x => x.id === id);
+      if(!item) return;
+      if(!confirm(`ต้องการลบรายการนี้ใช่ไหม?\n${item.text}`)) return;
+      await remove(todoItemRef(id));
+    }
+
+    async function toggleTodoDone(id, done){
+      await update(todoItemRef(id), {
+        done:!!done,
+        updatedAt:serverTimestamp()
+      });
+    }
+
+    function todayLocal(){
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0,10);
+    }
+
+    function formatDateThaiLike(iso){
+      if(!iso) return "";
+      const [y,m,d] = iso.split("-");
+      return `${Number(d)}/${Number(m)}/${y}`;
+    }
+
+    function num(v){
+      const n = Number(String(v ?? "").replace(/,/g,""));
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function fmt(n, digit=0){
+      return Number(n || 0).toLocaleString("en-US", {
+        minimumFractionDigits: digit,
+        maximumFractionDigits: digit
+      });
+    }
+
+    function calcPackType(bagsValue, kgValue){
+      const bags = num(bagsValue);
+      const kg = num(kgValue);
+      if(!bags || !kg) return "";
+      const kgPerBag = kg / bags;
+      if(Math.abs(kgPerBag - 25) < 0.0001) return "PP";
+      if(Math.abs(kgPerBag - 850) < 0.0001) return "JB";
+      return "";
+    }
+
+    function normalizePackType(v){
+      const s = String(v ?? "").trim().toUpperCase();
+      if(s === "PP" || s === "JB") return s;
+      return "";
+    }
+
+    function packFactor(packType){
+      const type = normalizePackType(packType);
+      if(type === "PP") return 25;
+      if(type === "JB") return 850;
+      return 0;
+    }
+
+    function kgFromBagsAndPackType(bagsValue, packType){
+      const bags = num(bagsValue);
+      const factor = packFactor(packType);
+      return bags && factor ? bags * factor : "";
+    }
+
+    const VALID_LOCATION_PLACES = (() => {
+      const out = [];
+      for(const side of ["1", "2"]){
+        for(const zone of ["A", "B", "C", "D"]){
+          for(let i = 1; i <= 60; i++){
+            out.push(`${side}${zone}${String(i).padStart(2, "0")}`);
+          }
+        }
+      }
+      out.push("ส่งออก", "โกดังใหม่");
+      return out;
+    })();
+    const VALID_LOCATION_SET = new Set(VALID_LOCATION_PLACES.map(x => x.toUpperCase()));
+
+    function normalizeLocationPlace(place){
+      const raw = String(place || '').trim();
+      if(!raw) return '';
+      const special = VALID_LOCATION_PLACES.find(x => x === raw);
+      if(special) return special;
+      const m = raw.toUpperCase().match(/^([12])\s*([ABCD])\s*-?\s*(\d{1,2})$/);
+      if(!m) return raw;
+      const n = Number(m[3]);
+      if(n < 1 || n > 60) return raw.toUpperCase();
+      return `${m[1]}${m[2]}${String(n).padStart(2, "0")}`;
+    }
+
+    // ใช้ดรอปดาวน์เป็น "ตัวช่วยเลือก" เท่านั้น ไม่ใช้บังคับตรวจโล
+    function isAllowedLocationPlace(place){
+      return true;
+    }
+
+
+    function pageRoot(page=currentPage){
+      return `knsTransport/pages/${page}`;
+    }
+
+    function legacyDateRef(date){
+      // ข้อมูลเดิมก่อนแยกหน้า STP/PTR จะอยู่ path นี้ ใช้สำหรับ fallback หน้า STP เท่านั้น
+      return ref(db, `knsTransport/plans/${date}/rows`);
+    }
+
+    function dateRef(date, page=currentPage){
+      return ref(db, `${pageRoot(page)}/plans/${date}/rows`);
+    }
+
+    function rowRef(id){
+      return ref(db, `${pageRoot()}/plans/${currentDate}/rows/${id}`);
+    }
+
+    function rowsRootRef(date=currentDate){
+      return ref(db, `${pageRoot()}/plans/${date}/rows`);
+    }
+
+    function encodeTankKey(tankCode){
+      return encodeURIComponent(String(tankCode || '').trim()).replace(/\./g, '%2E');
+    }
+
+    function normalizedTank(tankCode){
+      return String(tankCode || '').trim().toUpperCase();
+    }
+
+    function normalizedProduct(productName){
+      return String(productName || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    function makeProductTankKey(productName, tankCode){
+      const product = normalizedProduct(productName);
+      const tank = normalizedTank(tankCode);
+      if(!product || !tank) return '';
+      return `${encodeProductKey(product)}__${encodeTankKey(tank)}`;
+    }
+
+    function productTankLocationsRef(page=currentPage){
+      // จำ Location แยกตาม Product name + Tank code เพื่อไม่ให้ Tank เดียวกันแต่คนละสินค้าเรียกโลผิด
+      return ref(db, `${pageRoot(page)}/productTankLocations`);
+    }
+
+    function productTankLocationRef(productName, tankCode){
+      return ref(db, `${pageRoot()}/productTankLocations/${makeProductTankKey(productName, tankCode)}`);
+    }
+
+    function encodeProductKey(productName){
+      return encodeURIComponent(String(productName || '').trim()).replace(/\./g, '%2E');
+    }
+
+    function productOptionsRef(page=currentPage){
+      return ref(db, `${pageRoot(page)}/productOptions`);
+    }
+
+    function productOptionRef(productName){
+      return ref(db, `${pageRoot()}/productOptions/${encodeProductKey(productName)}`);
+    }
+
+    function formatUpdateTime(ts){
+      if(!ts) return '';
+      const d = new Date(ts);
+      if(Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString('th-TH', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit'
+      });
+    }
+
+    function getDisplayLocation(row){
+      // หน้า “ส่งออก” ต้องเก็บ Location แยกตามแถว เพราะสินค้าเดียวกันอาจถูกดึงออกจากหลายโลในวันเดียว
+      if(currentPage === OUTBOUND_PAGE) return String(row?.location ?? '').trim();
+      const key = makeProductTankKey(row?.productName, row?.tankCode);
+      const meta = key ? (tankLocationCache[key] || {}) : {};
+      return String(meta.location ?? row?.location ?? '').trim();
+    }
+
+
+    function splitLocationParts(locationText){
+      const text = String(locationText || '').trim();
+      if(!text) return [];
+      return text
+        .split(/\n|\/|,|;|\|/g)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => {
+          const m = part.match(/^(.+?)(?:\s*(?:=|:|：)\s*|\s+)(\d+(?:\.\d+)?)\s*(?:เลท|pallet|plt|pl|พาเลท)?$/i);
+          if(m) return { place:normalizeLocationPlace(m[1]), count:m[2].trim() };
+          return { place:normalizeLocationPlace(part.replace(/\s*=\s*$/,'').trim()), count:'' };
+        })
+        .filter(item => item.place);
+    }
+
+    function normalizeLocationText(locationText){
+      const parts = splitLocationParts(locationText);
+      if(!parts.length) return String(locationText || '').trim();
+      if(parts.length === 1) return parts[0].place;
+      return parts.map(item => item.count ? `${item.place}=${item.count}เลท` : item.place).join('\n');
+    }
+
+    function formatLocationForEdit(locationText){
+      return String(locationText || '').trim();
+    }
+
+
+    function parseLocationCodeInfo(place){
+      const normalized = normalizeLocationPlace(place);
+      const m = String(normalized || '').toUpperCase().match(/^([12])([ABCD])(\d{2})$/);
+      if(!m) return null;
+      const number = Number(m[3]);
+      if(number < 1 || number > 60) return null;
+      return { code:`${m[1]}${m[2]}${m[3]}`, side:m[1], zone:m[2], number };
+    }
+
+    function cleanBalanceText(value){
+      return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    function makeBalanceSkuKey(row){
+      const product = cleanBalanceText(row?.productName);
+      const batch = cleanBalanceText(row?.batchNo);
+      const tank = cleanBalanceText(row?.tankCode);
+      if(!product && !batch && !tank) return '';
+      return `${product}|${batch}|${tank}`;
+    }
+
+    function balanceQuantity(row){
+      const bags = num(row?.bags);
+      if(bags) return bags;
+      const kg = num(row?.kg);
+      return kg || 0;
+    }
+
+    function expandBalancePieces(row){
+      const qty = balanceQuantity(row);
+      if(!qty) return [];
+      const skuKey = makeBalanceSkuKey(row);
+      if(!skuKey) return [];
+      const parts = splitLocationParts(row?.location || row?.LOCATION || '');
+      const validParts = parts
+        .map(part => ({ ...part, info:parseLocationCodeInfo(part.place), count:num(part.count) }))
+        .filter(part => part.info);
+      if(!validParts.length) return [];
+
+      const hasAllCounts = validParts.length > 1 && validParts.every(part => part.count > 0);
+      const totalCount = hasAllCounts ? validParts.reduce((sum, part) => sum + part.count, 0) : 0;
+      return validParts.map(part => ({
+        code:part.info.code,
+        zone:part.info.zone,
+        side:part.info.side,
+        number:part.info.number,
+        skuKey,
+        productName:String(row?.productName || '').trim(),
+        batchNo:String(row?.batchNo || '').trim(),
+        tankCode:String(row?.tankCode || '').trim(),
+        qty:hasAllCounts && totalCount ? qty * (part.count / totalCount) : (validParts.length === 1 ? qty : qty / validParts.length)
+      }));
+    }
+
+    function addBalancePiece(map, piece){
+      const key = `${piece.code}|||${piece.skuKey}`;
+      const old = map.get(key) || { ...piece, qty:0 };
+      old.qty += piece.qty;
+      map.set(key, old);
+    }
+
+    function buildOutboundPieceMap(){
+      const outbound = new Map();
+      for(const row of (emptyLocationRowsByPage[OUTBOUND_PAGE] || [])){
+        for(const piece of expandBalancePieces(row)) addBalancePiece(outbound, piece);
+      }
+      return outbound;
+    }
+
+    function locationExportUseSummary(row){
+      if(currentPage === OUTBOUND_PAGE) return null;
+      const pieces = expandBalancePieces(row);
+      if(!pieces.length) return null;
+      const outbound = buildOutboundPieceMap();
+      let inboundQty = 0;
+      let outboundQty = 0;
+      for(const piece of pieces){
+        inboundQty += piece.qty;
+        outboundQty += outbound.get(`${piece.code}|||${piece.skuKey}`)?.qty || 0;
+      }
+      if(outboundQty <= 0.0001) return null;
+      return { inboundQty, outboundQty, remainingQty:inboundQty - outboundQty };
+    }
+
+    function manualEmptyLocationsRef(date=currentDate){
+      return ref(db, `knsTransport/emptyLocationsManual/${date}/items`);
+    }
+
+    function manualEmptyLocationItemRef(id){
+      return ref(db, `knsTransport/emptyLocationsManual/${currentDate}/items/${id}`);
+    }
+
+    function parseManualEmptyLocationInput(text){
+      const raw = String(text || '');
+      const codeMatches = raw.match(/[12]\s*[ABCD]\s*-?\s*\d{1,2}/gi) || [];
+      const looseParts = raw.split(/[\n,;|/]+/g);
+      return Array.from(new Set([...codeMatches, ...looseParts]
+        .map(value => parseLocationCodeInfo(value))
+        .filter(Boolean)
+        .map(info => info.code)));
+    }
+
+    async function addManualEmptyLocations(){
+      const codes = parseManualEmptyLocationInput(emptyLocationManualInput?.value || '');
+      if(!codes.length){
+        alert('กรุณาพิมพ์โลว่าง เช่น 1A-02 หรือ 2B45');
+        emptyLocationManualInput?.focus();
+        return;
+      }
+      const updates = {};
+      for(const code of codes){
+        const info = parseLocationCodeInfo(code);
+        if(!info) continue;
+        const newRef = push(manualEmptyLocationsRef());
+        updates[newRef.key] = {
+          id:newRef.key,
+          code:info.code,
+          zone:info.zone,
+          side:info.side,
+          number:info.number,
+          manual:true,
+          createdAt:serverTimestamp(),
+          updatedAt:serverTimestamp()
+        };
+      }
+      if(Object.keys(updates).length){
+        await update(manualEmptyLocationsRef(), updates);
+        emptyLocationManualInput.value = '';
+        emptyLocationManualInput.focus();
+      }
+    }
+
+    async function deleteManualEmptyLocation(id){
+      if(!id) return;
+      await remove(manualEmptyLocationItemRef(id));
+    }
+
+    function buildEmptyLocationSummary(){
+      const inbound = new Map();
+      const outbound = new Map();
+      for(const page of BALANCE_SOURCE_PAGES){
+        const rows = emptyLocationRowsByPage[page] || [];
+        for(const row of rows){
+          for(const piece of expandBalancePieces(row)) addBalancePiece(inbound, piece);
+        }
+      }
+      for(const row of (emptyLocationRowsByPage[OUTBOUND_PAGE] || [])){
+        for(const piece of expandBalancePieces(row)) addBalancePiece(outbound, piece);
+      }
+
+      const byLocation = new Map();
+      for(const [key, stock] of inbound.entries()){
+        const outQty = outbound.get(key)?.qty || 0;
+        const remaining = stock.qty - outQty;
+        const current = byLocation.get(stock.code) || {
+          code:stock.code,
+          zone:stock.zone,
+          side:stock.side,
+          number:stock.number,
+          inboundQty:0,
+          outboundQty:0,
+          remainingQty:0,
+          details:[]
+        };
+        current.inboundQty += stock.qty;
+        current.outboundQty += outQty;
+        current.remainingQty += Math.max(remaining, 0);
+        current.details.push({
+          productName:stock.productName,
+          batchNo:stock.batchNo,
+          tankCode:stock.tankCode,
+          inboundQty:stock.qty,
+          outboundQty:outQty,
+          remainingQty:remaining
+        });
+        byLocation.set(stock.code, current);
+      }
+
+      const zones = { A:[], B:[], C:[], D:[] };
+      for(const loc of byLocation.values()){
+        const isEmpty = loc.details.length && loc.details.every(item => item.remainingQty <= 0.0001);
+        if(isEmpty && zones[loc.zone]) zones[loc.zone].push({ ...loc, auto:true });
+      }
+      for(const item of manualEmptyLocations){
+        const info = parseLocationCodeInfo(item.code);
+        if(!info || !zones[info.zone]) continue;
+        const existing = zones[info.zone].find(loc => loc.code === info.code);
+        if(existing){
+          existing.manual = true;
+          existing.manualId = item.id;
+        }else{
+          zones[info.zone].push({
+            code:info.code,
+            zone:info.zone,
+            side:info.side,
+            number:info.number,
+            inboundQty:0,
+            outboundQty:0,
+            remainingQty:0,
+            details:[],
+            manual:true,
+            manualOnly:true,
+            manualId:item.id
+          });
+        }
+      }
+      for(const zone of EMPTY_LOCATION_ZONES){
+        zones[zone].sort((a,b) => (a.side.localeCompare(b.side) || a.number - b.number || a.code.localeCompare(b.code)));
+      }
+      return { total:Object.values(zones).reduce((sum, list) => sum + list.length, 0), zones };
+    }
+
+    function emptyLocationTooltip(loc){
+      const lines = [
+        `${loc.code}${loc.manual ? ' (เพิ่มมือ)' : ''}`,
+        loc.manualOnly ? 'รายการนี้เพิ่มด้วยมือ' : `รับเข้า: ${fmt(loc.inboundQty, 0)} / ส่งออก: ${fmt(loc.outboundQty, 0)} / คงเหลือ: ${fmt(Math.max(loc.remainingQty, 0), 0)}`,
+        ...loc.details.slice(0, 6).map(item => {
+          const product = [item.productName, item.batchNo, item.tankCode].filter(Boolean).join(' / ');
+          return `${product || 'สินค้า'}: ${fmt(item.inboundQty, 0)} - ${fmt(item.outboundQty, 0)} = ${fmt(item.remainingQty, 0)}`;
+        })
+      ];
+      if(loc.details.length > 6) lines.push(`...อีก ${loc.details.length - 6} รายการ`);
+      return lines.join('\n');
+    }
+
+    function renderEmptyLocations(){
+      if(!emptyLocationLists || !emptyLocationCount) return;
+      emptyLocationSummary = buildEmptyLocationSummary();
+      emptyLocationCount.textContent = fmt(emptyLocationSummary.total);
+      emptyLocationLists.innerHTML = EMPTY_LOCATION_ZONES.map(zone => {
+        const items = emptyLocationSummary.zones[zone] || [];
+        const body = items.length ? items.map(loc => `
+          <span class="empty-location-chip ${loc.manual ? 'manual' : ''}" title="${escapeAttr(emptyLocationTooltip(loc))}">
+            ${escapeHtml(loc.code)} <span class="remain">ว่าง</span>${loc.manual ? ' <span class="manual-tag">มือ</span>' : ''}
+            ${loc.manualId ? `<button class="manual-del" type="button" data-empty-action="delete-manual" data-id="${escapeAttr(loc.manualId)}" title="ลบรายการมือ">×</button>` : ''}
+          </span>
+        `).join('') : `<div class="empty-zone-empty">ยังไม่มีโลว่าง Zone ${zone}</div>`;
+        return `
+          <section class="empty-zone" data-zone="${zone}">
+            <div class="empty-zone-title"><span>ZONE ${zone}</span><span class="badge">${items.length}</span></div>
+            <div class="empty-location-list">${body}</div>
+          </section>
+        `;
+      }).join('');
+    }
+
+    function listenEmptyLocations(date){
+      emptyLocationUnsubscribes.forEach(unsub => { try{ if(typeof unsub === 'function') unsub(); }catch(_){} });
+      emptyLocationUnsubscribes = [];
+      emptyLocationRowsByPage = { STP:[], PTR:[], OUT:[] };
+      manualEmptyLocations = [];
+      renderEmptyLocations();
+      const manualOff = onValue(manualEmptyLocationsRef(date), (snap) => {
+        manualEmptyLocations = Object.entries(snap.val() || {}).map(([id, item]) => ({
+          id,
+          code:String(item?.code || '').trim(),
+          zone:item?.zone || '',
+          side:item?.side || '',
+          number:Number(item?.number || 0),
+          manual:true
+        })).filter(item => parseLocationCodeInfo(item.code));
+        renderEmptyLocations();
+      }, (err) => console.error('manual empty location listener', err));
+      emptyLocationUnsubscribes.push(manualOff);
+      for(const page of [...BALANCE_SOURCE_PAGES, OUTBOUND_PAGE]){
+        const off = onValue(dateRef(date, page), (snap) => {
+          emptyLocationRowsByPage[page] = sortRows(snap.val() || {});
+          renderEmptyLocations();
+          if(currentPage !== OUTBOUND_PAGE) renderRows();
+        }, (err) => {
+          console.error(`empty location listener ${page}`, err);
+        });
+        emptyLocationUnsubscribes.push(off);
+      }
+    }
+
+    function emptyLocationTextForClipboard(){
+      const lines = [`โลว่างประจำวันที่ ${currentDate}`];
+      for(const zone of EMPTY_LOCATION_ZONES){
+        const codes = (emptyLocationSummary.zones[zone] || []).map(loc => loc.code);
+        lines.push(`ZONE ${zone}: ${codes.length ? codes.join(', ') : '-'}`);
+      }
+      return lines.join('\n');
+    }
+
+    async function copyEmptyLocations(){
+      const text = emptyLocationTextForClipboard();
+      try{
+        await navigator.clipboard.writeText(text);
+        alert('คัดลอกโลว่างเรียบร้อยแล้ว');
+      }catch(_){
+        prompt('คัดลอกรายการโลว่าง', text);
+      }
+    }
+
+    function hasExportLocation(row){
+      return getDisplayLocation(row).includes('ส่งออก');
+    }
+
+    function locationColorStyle(locationText){
+      // ไม่สุ่มสีตามข้อความ Location แล้ว เพื่อให้ช่อง Location เป็นสีเดียว อ่านง่าย ไม่สับสน
+      return '--location-bg:#fffbe6;--location-meta-bg:#fff0b3;';
+    }
+
+    function isRecentlyUpdated(ts){
+      return ts && (Date.now() - Number(ts)) < 1000 * 60 * 30;
+    }
+
+    function setOnline(isOnline){
+      syncDot.className = `sync-dot ${isOnline ? "online":"offline"}`;
+      syncText.textContent = isOnline ? "ออนไลน์ / ซิงก์เรียลไทม์" : "ออฟไลน์ / รอเชื่อมต่อ";
+    }
+
+    function listenConnection(){
+      const connectedRef = ref(db, ".info/connected");
+      onValue(connectedRef, (snap) => {
+        setOnline(!!snap.val());
+      });
+      const userStatusRef = ref(db, `knsTransport/presence/${crypto.randomUUID()}`);
+      onValue(connectedRef, (snap) => {
+        if (snap.val() === true) {
+          set(userStatusRef, { online:true, at:serverTimestamp() });
+          onDisconnect(userStatusRef).remove();
+        }
+      });
+    }
+
+    function applyPageUI(){
+      if(!PAGE_LABELS[currentPage]) currentPage = "STP";
+      pageTabs.forEach(btn => btn.classList.toggle("active", btn.dataset.page === currentPage));
+      document.body.dataset.page = currentPage;
+      pageName.textContent = PAGE_LABELS[currentPage] || currentPage;
+      document.title = `KNS ${PAGE_LABELS[currentPage] || currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
+    }
+
+    function rowOrderValue(row, fallbackIndex=0){
+      const explicit = Number(row?.sortOrder);
+      if(Number.isFinite(explicit) && explicit > 0) return explicit;
+      const created = Number(row?.createdAt);
+      if(Number.isFinite(created) && created > 0) return created;
+      return fallbackIndex + 1;
+    }
+
+    function sortRows(raw){
+      return Object.entries(raw || {}).map(([id, data]) => ({ id, ...data })).sort((a,b) => {
+        const ba = String(a.bookingNo || '').trim();
+        const bb = String(b.bookingNo || '').trim();
+        if(ba || bb){
+          const bookingCompare = ba.localeCompare(bb, 'th', { numeric:true });
+          if(bookingCompare) return bookingCompare;
+        }
+        const ta = num(a.tripNo), tb = num(b.tripNo);
+        if(ta !== tb) return ta - tb;
+        return rowOrderValue(a) - rowOrderValue(b);
+      });
+    }
+
+    function listenDate(date){
+      currentDate = date;
+      applyPageUI();
+      listenTodos();
+      listenEmptyLocations(date);
+      if(unsubscribe) unsubscribe();
+      if(tankLocationUnsubscribe) tankLocationUnsubscribe();
+      if(productOptionsUnsubscribe) productOptionsUnsubscribe();
+      tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
+
+      productOptionsUnsubscribe = onValue(productOptionsRef(), (snap) => {
+        productOptionsCache = snap.val() || {};
+        renderProductDatalist();
+      });
+
+      tankLocationUnsubscribe = onValue(productTankLocationsRef(), (snap) => {
+        tankLocationCache = snap.val() || {};
+        queueLocationSync();
+        renderRows();
+      });
+
+      unsubscribe = onValue(dateRef(date), (snap) => {
+        const raw = snap.val() || {};
+        rowsCache = sortRows(raw);
+
+        // เพื่อไม่ให้ข้อมูลเดิมหาย: ถ้าเปิด STP แล้ว path ใหม่ยังว่าง ให้แสดงข้อมูลเดิมจาก knsTransport/plans/... เป็น fallback
+        if(!rowsCache.length && currentPage === "STP"){
+          onValue(legacyDateRef(date), (legacySnap) => {
+            const legacyRaw = legacySnap.val() || {};
+            rowsCache = sortRows(legacyRaw);
+            queueLocationSync();
+            renderRows();
+            renderTotals();
+          }, { onlyOnce:true });
+          return;
+        }
+
+        queueLocationSync();
+        renderRows();
+        renderTotals();
+      });
+    }
+
+    function renderTotals(){
+      const uniqueTrips = new Set(rowsCache.map(r => String(r.tripNo || "").trim()).filter(Boolean));
+      const bags = rowsCache.reduce((s,r)=>s+num(r.bags),0);
+      const kg = rowsCache.reduce((s,r)=>s+num(r.kg),0);
+      const pallets = rowsCache.reduce((s,r)=>s+num(r.pallets),0);
+      $("totalTrips").textContent = fmt(uniqueTrips.size);
+      $("totalBags").textContent = fmt(bags);
+      $("totalKg").textContent = fmt(kg,2);
+      $("totalPallets").textContent = fmt(pallets);
+    }
+
+    function inputCell(row, field, type="text"){
+      const value = row[field] ?? "";
+      if(field === "remark"){
+        return `<textarea data-id="${row.id}" data-field="${field}">${escapeHtml(value)}</textarea>`;
+      }
+      if(field === "packType"){
+        const type = normalizePackType(value);
+        return `<select data-id="${row.id}" data-field="${field}">
+          <option value="" ${type === "" ? "selected" : ""}>-</option>
+          <option value="PP" ${type === "PP" ? "selected" : ""}>PP</option>
+          <option value="JB" ${type === "JB" ? "selected" : ""}>JB</option>
+        </select>`;
+      }
+      if(field === "productName"){
+        return `<input class="product-input" list="productList" autocomplete="off" placeholder="พิมพ์เพื่อค้นหา/เลือกสินค้า" data-id="${row.id}" data-field="${field}" type="text" value="${escapeAttr(value)}" />`;
+      }
+      return `<input data-id="${row.id}" data-field="${field}" type="${type}" value="${escapeAttr(value)}" />`;
+    }
+
+    function renderProductDatalist(){
+      const list = $("productList");
+      if(!list) return;
+      const fromDb = Object.values(productOptionsCache || {})
+        .map(item => typeof item === "string" ? item : item?.name)
+        .filter(Boolean);
+      const fromRows = rowsCache.map(r => r.productName).filter(Boolean);
+      const names = Array.from(new Set([...fromDb, ...fromRows].map(v => String(v).trim()).filter(Boolean)))
+        .sort((a,b) => a.localeCompare(b, 'th'));
+      list.innerHTML = names.map(name => `<option value="${escapeAttr(name)}"></option>`).join("");
+    }
+
+    async function saveProductOption(productName){
+      const name = String(productName || '').trim();
+      if(!name) return;
+      await set(productOptionRef(name), {
+        name,
+        updatedAt: serverTimestamp(),
+        sourceDate: currentDate,
+        page: currentPage
+      });
+    }
+
+    function locationMetaFor(row){
+      const key = makeProductTankKey(row.productName, row.tankCode);
+      return key ? (tankLocationCache[key] || {}) : {};
+    }
+
+    function locationCell(row, span=1, count=1){
+      const meta = locationMetaFor(row);
+      const locationValue = getDisplayLocation(row);
+      const editValue = formatLocationForEdit(locationValue);
+      const updatedAt = meta.updatedAt || row.locationUpdatedAt;
+      const recently = isRecentlyUpdated(updatedAt);
+      const note = updatedAt ? `แก้ไขล่าสุด ${formatUpdateTime(updatedAt)}` : "ยังไม่มีประวัติแก้ไข Location";
+      const merged = count > 1 ? `<span class="location-merged-note">รวม ${count} แถว Product+Tank เดียวกัน</span>` : "";
+      const isExport = String(locationValue).includes('ส่งออก');
+      const exportUse = locationExportUseSummary(row);
+      const exportNote = exportUse ? `<span class="location-used-note">เคยส่งออก ${fmt(exportUse.outboundQty, 0)} / เหลือ ${fmt(Math.max(exportUse.remainingQty, 0), 0)}</span>` : '';
+      const classes = [
+        'location-cell',
+        recently ? 'location-updated' : '',
+        isExport ? 'location-export' : '',
+        exportUse ? 'location-used-by-outbound' : ''
+      ].filter(Boolean).join(' ');
+      return `<td class="${classes}" rowspan="${span}" style="${locationColorStyle(locationValue)}">
+        <div class="location-editor">
+          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(note)}" placeholder="">${escapeHtml(editValue)}</textarea>
+          <div class="location-meta">${escapeHtml(note)} ${merged} ${exportNote}</div>
+        </div>
+      </td>`;
+    }
+
+    function buildLocationSpans(rows){
+      const spans = new Map();
+      if(currentPage === OUTBOUND_PAGE){
+        for(const row of rows) spans.set(row.id, { show:true, span:1, count:1 });
+        return spans;
+      }
+      for(let i=0; i<rows.length; i++){
+        const key = makeProductTankKey(rows[i].productName, rows[i].tankCode);
+        if(!key){ spans.set(rows[i].id, { show:true, span:1, count:1 }); continue; }
+        let count = 1;
+        while(i + count < rows.length && makeProductTankKey(rows[i + count].productName, rows[i + count].tankCode) === key){
+          count++;
+        }
+        spans.set(rows[i].id, { show:true, span:count, count });
+        for(let j=1; j<count; j++){
+          spans.set(rows[i + j].id, { show:false, span:0, count });
+        }
+        i += count - 1;
+      }
+      return spans;
+    }
+
+    function buildTankShadeClasses(rows){
+      // สลับสีตามบล็อก Product name + Tank code ที่อยู่ติดกัน
+      // เพื่อให้เมื่อเปลี่ยน Product/Tank ถัดไป สีต้องสลับทันที ไม่ใช้สีจากลำดับที่เคยเจอทั้งตาราง
+      const classes = new Map();
+      let shadeIndex = -1;
+      let previousKey = null;
+      for(const row of rows){
+        const key = makeProductTankKey(row.productName, row.tankCode) || `__NO_PRODUCT_TANK__${row.id}`;
+        if(key !== previousKey){
+          shadeIndex++;
+          previousKey = key;
+        }
+        classes.set(row.id, shadeIndex % 2 === 0 ? 'tank-shade-a' : 'tank-shade-b');
+      }
+      return classes;
+    }
+
+    function hasPendingEdit(){
+      return !!tbody.querySelector("input.dirty, textarea.dirty, select.dirty, input.saving, textarea.saving, select.saving");
+    }
+
+    function normalizedTripNo(row){
+      return String(row?.tripNo ?? '').trim();
+    }
+
+    function rowsInSameTripById(id){
+      const row = rowsCache.find(r => r.id === id);
+      if(!row) return [];
+      const trip = normalizedTripNo(row);
+      if(!trip) return [row];
+      return rowsCache.filter(r => normalizedTripNo(r) === trip);
+    }
+
+    function tripStatusForRow(row){
+      const trip = normalizedTripNo(row);
+      const match = trip ? rowsCache.find(r => normalizedTripNo(r) === trip && r.tripStatus) : row;
+      const value = match?.tripStatus || row?.tripStatus || '';
+      return TRIP_STATUS[value] ? value : '';
+    }
+
+    function tripStatusClass(row){
+      const status = tripStatusForRow(row);
+      return status ? TRIP_STATUS[status].className : '';
+    }
+
+    function tripStatusChip(row){
+      const status = tripStatusForRow(row);
+      return status ? `<span class="trip-status-chip">สถานะ: ${escapeHtml(TRIP_STATUS[status].short)}</span>` : '';
+    }
+
+    function tripStatusButtons(row, isGroupStart){
+      if(!isGroupStart) return '';
+      const status = tripStatusForRow(row);
+      const activeText = status ? `ตอนนี้: ${TRIP_STATUS[status].short}` : 'ยังไม่เลือกสถานะคันนี้';
+      return `<div class="trip-status-actions" title="${escapeAttr(activeText)}">
+        ${tripStatusChip(row)}
+        <button type="button" class="status-ok-btn" data-action="trip-status" data-status="ok" data-id="${escapeAttr(row.id)}">ตรงแผน</button>
+        <button type="button" class="status-mismatch-btn" data-action="trip-status" data-status="mismatch" data-id="${escapeAttr(row.id)}">ไม่ตรงแผน</button>
+        <button type="button" class="status-rollover-btn" data-action="trip-rollover" data-id="${escapeAttr(row.id)}">เลื่อนไปพรุ่งนี้</button>
+      </div>`;
+    }
+
+    function nextWorkingDateAfter(dateText){
+      const d = new Date(`${dateText}T00:00:00`);
+      d.setDate(d.getDate() + 1);
+      // getDay(): 0 = Sunday; ถ้าวันถัดไปเป็นวันอาทิตย์ ให้ข้ามไปวันจันทร์
+      if(d.getDay() === 0) d.setDate(d.getDate() + 1);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0,10);
+    }
+
+    function addCarryOverRemark(remark){
+      const text = String(remark || '').trim();
+      if(text.includes('คันตกค้าง')) return text || 'คันตกค้าง';
+      return text ? `คันตกค้าง / ${text}` : 'คันตกค้าง';
+    }
+
+    function cleanRowForCopy(row, targetDate){
+      const { id, createdAt, updatedAt, locationSyncedAt, tripStatusUpdatedAt, rolledOverAt, rolledOverTo, ...data } = row;
+      return {
+        ...data,
+        dateText: formatDateThaiLike(targetDate),
+        remark: addCarryOverRemark(data.remark),
+        tripStatus: '',
+        carryOver: true,
+        carryOverFrom: currentDate,
+        carryOverAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+    }
+
+    async function setTripStatus(id, status){
+      if(!TRIP_STATUS[status]) return;
+      const tripRows = rowsInSameTripById(id);
+      if(!tripRows.length) return;
+      const updates = {};
+      for(const row of tripRows){
+        updates[`${row.id}/tripStatus`] = status;
+        updates[`${row.id}/tripStatusUpdatedAt`] = serverTimestamp();
+        updates[`${row.id}/updatedAt`] = serverTimestamp();
+      }
+      await update(rowsRootRef(), updates);
+    }
+
+    async function rolloverTripToNextWorkingDay(id){
+      const tripRows = rowsInSameTripById(id);
+      if(!tripRows.length) return;
+      const targetDate = nextWorkingDateAfter(currentDate);
+      const tripNo = normalizedTripNo(tripRows[0]) || '-';
+      if(!confirm(`ต้องการเลื่อนคัน No. ${tripNo} ไปลงวันที่ ${targetDate} ใช่ไหม?\nระบบจะคัดลอกทั้งคันไปวันถัดไป และกำกับ Remark ว่า "คันตกค้าง"`)) return;
+
+      await setTripStatus(id, 'rollover');
+
+      const targetRowsRef = dateRef(targetDate);
+      const targetSnapshot = await get(targetRowsRef);
+      const targetRows = sortRows(targetSnapshot.val() || {});
+      const baseOrder = targetRows.length
+        ? Math.max(...targetRows.map((r,i) => rowOrderValue(r,i))) + 1000
+        : Date.now();
+
+      const updatesForTarget = {};
+      tripRows.forEach((row, index) => {
+        const newRef = push(targetRowsRef);
+        updatesForTarget[newRef.key] = {
+          ...cleanRowForCopy(row, targetDate),
+          sortOrder: baseOrder + (index * 1000)
+        };
+      });
+      await update(targetRowsRef, updatesForTarget);
+
+      const updatesForCurrent = {};
+      for(const row of tripRows){
+        updatesForCurrent[`${row.id}/rolledOverTo`] = targetDate;
+        updatesForCurrent[`${row.id}/rolledOverAt`] = serverTimestamp();
+        updatesForCurrent[`${row.id}/updatedAt`] = serverTimestamp();
+      }
+      await update(rowsRootRef(), updatesForCurrent);
+      alert(`เลื่อนคัน No. ${tripNo} ไปวันที่ ${targetDate} เรียบร้อยแล้ว`);
+    }
+
+    function renderRows(){
+      // ถ้าผู้ใช้กำลังพิมพ์อยู่ ยังไม่ให้ realtime render มาทับข้อความที่ยังไม่ได้กด Enter
+      if(hasPendingEdit() && tbody.contains(document.activeElement)){
+        return;
+      }
+      if(!rowsCache.length){
+        const emptyText = currentPage === OUTBOUND_PAGE
+          ? 'ยังไม่มีข้อมูลส่งออกของวันนี้ กด “เพิ่มคันท้ายสุด” หรือนำเข้า CSV เพื่อเริ่มคีย์แป้งส่งออก'
+          : 'ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย';
+        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">${emptyText}</td></tr>`;
+        return;
+      }
+      const locationSpans = buildLocationSpans(rowsCache);
+      const tankShadeClasses = buildTankShadeClasses(rowsCache);
+      tbody.innerHTML = rowsCache.map((row, index) => {
+        const prev = rowsCache[index - 1];
+        const next = rowsCache[index + 1];
+        const isGroupStart = index === 0 || String(prev?.tripNo ?? "") !== String(row.tripNo ?? "");
+        const isGroupEnd = index === rowsCache.length - 1 || String(next?.tripNo ?? "") !== String(row.tripNo ?? "");
+        const spanInfo = locationSpans.get(row.id) || { show:true, span:1, count:1 };
+        const isExportRow = hasExportLocation(row);
+        const classes = [
+          tankShadeClasses.get(row.id) || 'tank-shade-a',
+          isGroupStart ? "group-start" : "",
+          isGroupEnd ? "group-end" : "",
+          isExportRow ? "export-row" : "",
+          tripStatusClass(row)
+        ].filter(Boolean).join(" ");
+        return `
+        <tr class="${classes}">
+          <td class="${isGroupStart ? "" : "visual-blank"}">${isGroupStart ? inputCell(row,"tripNo","number") : `<input data-id="${row.id}" data-field="tripNo" type="number" value="${escapeAttr(row.tripNo ?? "")}" />`}</td>
+          <td>${inputCell(row,"productName")}</td>
+          <td>${inputCell(row,"batchNo")}</td>
+          <td>${inputCell(row,"tankCode")}</td>
+          <td>${inputCell(row,"bags","number")}</td>
+          <td>${inputCell(row,"kg","number")}</td>
+          <td>${inputCell(row,"pallets","number")}</td>
+          <td>${inputCell(row,"packType")}</td>
+          <td>${inputCell(row,"remark")}</td>
+          ${spanInfo.show ? locationCell(row, spanInfo.span, spanInfo.count) : ""}
+          <td>
+            <div class="row-actions">
+              <button class="good" data-action="insert-item" data-id="${row.id}" title="เพิ่มรายการสินค้าถัดจากแถวนี้">+ รายการ</button>
+              <button class="secondary" data-action="insert-trip" data-id="${row.id}" title="เพิ่มคันรถถัดจากคันนี้">+ คัน</button>
+              <button class="light" data-action="dup" data-id="${row.id}" title="คัดลอกแถว">คัดลอก</button>
+              <button class="danger" data-action="del" data-id="${row.id}" title="ลบแถว">ลบ</button>
+              ${tripStatusButtons(row, isGroupStart)}
+            </div>
+          </td>
+        </tr>`;
+      }).join("");
+      renderProductDatalist();
+    }
+
+    function escapeHtml(v){
+      return String(v ?? "").replace(/[&<>"']/g, m => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+    function escapeAttr(v){ return escapeHtml(v).replace(/\n/g, " "); }
+
+    function queueLocationSync(){
+      clearTimeout(locationSyncTimer);
+      locationSyncTimer = setTimeout(syncRowsWithTankLocations, 250);
+    }
+
+    async function syncRowsWithTankLocations(){
+      if(currentPage === OUTBOUND_PAGE) return;
+      if(!rowsCache.length) return;
+      const updates = {};
+      const memoryUpdates = {};
+      let changed = false;
+      let memoryChanged = false;
+      for(const row of rowsCache){
+        const key = makeProductTankKey(row.productName, row.tankCode);
+        if(!key) continue;
+        const meta = tankLocationCache[key];
+
+        // ถ้าแถวเก่ามี Location อยู่แล้ว แต่ยังไม่มีประวัติแบบ Product+Tank ให้บันทึกขึ้นฐานใหม่อัตโนมัติ
+        if((!meta || meta.location === undefined) && String(row.location ?? '').trim()){
+          memoryUpdates[key] = {
+            productName: String(row.productName || '').trim(),
+            productKey: normalizedProduct(row.productName),
+            tankCode: normalizedTank(row.tankCode),
+            location: String(row.location || '').trim(),
+            updatedAt: row.locationUpdatedAt || serverTimestamp(),
+            page: currentPage,
+            sourceDate: currentDate
+          };
+          memoryChanged = true;
+          continue;
+        }
+
+        if(!meta || meta.location === undefined) continue;
+        if(String(row.location ?? '') !== String(meta.location ?? '')){
+          updates[`${row.id}/location`] = meta.location ?? '';
+          updates[`${row.id}/locationUpdatedAt`] = meta.updatedAt || serverTimestamp();
+          updates[`${row.id}/locationSyncedAt`] = serverTimestamp();
+          changed = true;
+        }
+      }
+      if(memoryChanged){
+        await update(productTankLocationsRef(), memoryUpdates);
+      }
+      if(changed){
+        await update(rowsRootRef(), updates);
+      }
+    }
+
+    async function getKnownLocation(productName, tankCode){
+      const key = makeProductTankKey(productName, tankCode);
+      if(!key) return null;
+      const local = tankLocationCache[key];
+      if(local && local.location !== undefined) return local;
+      const snap = await get(productTankLocationRef(productName, tankCode));
+      return snap.val();
+    }
+
+    async function saveLocationForTank(rowId, locationValue){
+      // หน้า “ส่งออก” ใช้โลเคชั่นรายแถว ไม่ซิงก์ตาม Product+Tank เพื่อไม่ให้ข้อมูลโลต้นทางถูกทับกัน
+      locationValue = String(locationValue || '').trim();
+      if(currentPage === OUTBOUND_PAGE){
+        await update(rowRef(rowId), {
+          location: locationValue,
+          locationUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return;
+      }
+      // เก็บข้อความ Location ตาม Product name + Tank code เพื่อรองรับ Tank เดียวกันแต่คนละสินค้า
+      const row = rowsCache.find(r => r.id === rowId);
+      const product = normalizedProduct(row?.productName);
+      const tank = normalizedTank(row?.tankCode);
+      if(!product || !tank){
+        await update(rowRef(rowId), {
+          location: locationValue,
+          locationUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return;
+      }
+      const payload = {
+        productName: String(row?.productName || '').trim(),
+        productKey: product,
+        tankCode: tank,
+        location: locationValue,
+        updatedAt: serverTimestamp(),
+        page: currentPage,
+        sourceDate: currentDate
+      };
+      await set(productTankLocationRef(row.productName, tank), payload);
+
+      const updates = {};
+      for(const r of rowsCache){
+        if(makeProductTankKey(r.productName, r.tankCode) === makeProductTankKey(row.productName, tank)){
+          updates[`${r.id}/location`] = locationValue;
+          updates[`${r.id}/locationUpdatedAt`] = serverTimestamp();
+          updates[`${r.id}/updatedAt`] = serverTimestamp();
+        }
+      }
+      if(!updates[`${rowId}/location`]){
+        updates[`${rowId}/location`] = locationValue;
+        updates[`${rowId}/locationUpdatedAt`] = serverTimestamp();
+        updates[`${rowId}/updatedAt`] = serverTimestamp();
+      }
+      await update(rowsRootRef(), updates);
+    }
+
+    async function applyLocationAfterProductOrTankChange(rowId, productName, tankCode){
+      if(currentPage === OUTBOUND_PAGE) return;
+      const product = normalizedProduct(productName);
+      const tank = normalizedTank(tankCode);
+      if(!product || !tank) return;
+      const known = await getKnownLocation(productName, tank);
+      const row = rowsCache.find(r => r.id === rowId);
+      if(known && known.location !== undefined){
+        await update(rowRef(rowId), {
+          productName: String(productName || '').trim(),
+          tankCode: tank,
+          location: known.location ?? '',
+          locationUpdatedAt: known.updatedAt || serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }else if(row?.location){
+        await set(productTankLocationRef(productName, tank), {
+          productName: String(productName || '').trim(),
+          productKey: product,
+          tankCode: tank,
+          location: row.location,
+          updatedAt: serverTimestamp(),
+          page: currentPage,
+          sourceDate: currentDate
+        });
+      }
+    }
+
+    function nextDefaultSortOrder(){
+      if(!rowsCache.length) return Date.now();
+      const maxOrder = Math.max(...rowsCache.map((r,i) => rowOrderValue(r,i)));
+      return Math.max(Date.now(), maxOrder + 1000);
+    }
+
+    function orderBetween(prevOrder, nextOrder){
+      if(Number.isFinite(nextOrder) && nextOrder > prevOrder) return (prevOrder + nextOrder) / 2;
+      return prevOrder + 1000;
+    }
+
+    async function addRow(prefill={}, options={}){
+      const nextTrip = rowsCache.length
+        ? Math.max(...rowsCache.map(r => num(r.tripNo))) + 1
+        : 1;
+      const tank = normalizedTank(prefill.tankCode ?? "");
+      const productName = prefill.productName ?? "";
+      const knownLocation = currentPage !== OUTBOUND_PAGE && productName && tank ? await getKnownLocation(productName, tank) : null;
+      const newRef = push(dateRef(currentDate));
+      await set(newRef, {
+        dateText: formatDateThaiLike(currentDate),
+        tripNo: prefill.tripNo ?? nextTrip,
+        productName,
+        batchNo: prefill.batchNo ?? "",
+        tankCode: tank || (prefill.tankCode ?? ""),
+        bags: prefill.bags ?? "",
+        kg: prefill.kg ?? "",
+        pallets: prefill.pallets ?? "",
+        packType: normalizePackType(prefill.packType) || calcPackType(prefill.bags, prefill.kg),
+        remark: prefill.remark ?? "Plastic pallet (60)",
+        location: knownLocation?.location ?? prefill.location ?? "",
+        locationUpdatedAt: knownLocation?.updatedAt ?? null,
+        tripStatus: prefill.tripStatus ?? "",
+        bookingNo: prefill.bookingNo ?? "",
+        allocateText: prefill.allocateText ?? "",
+        exportRound: prefill.exportRound ?? "",
+        sourceQty: prefill.sourceQty ?? "",
+        carryOver: !!prefill.carryOver,
+        carryOverFrom: prefill.carryOverFrom ?? null,
+        carryOverAt: prefill.carryOverAt ?? null,
+        rolledOverTo: prefill.rolledOverTo ?? null,
+        rolledOverAt: prefill.rolledOverAt ?? null,
+        sortOrder: options.sortOrder ?? prefill.sortOrder ?? nextDefaultSortOrder(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      if(productName) await saveProductOption(productName);
+    }
+
+    async function insertItemAfter(id){
+      const index = rowsCache.findIndex(r => r.id === id);
+      const row = rowsCache[index];
+      if(!row) return;
+      const currentOrder = rowOrderValue(row, index);
+      const nextSameTripIndex = rowsCache.findIndex((r,i) => i > index && String(r.tripNo ?? '') === String(row.tripNo ?? ''));
+      const nextOrder = nextSameTripIndex >= 0 ? rowOrderValue(rowsCache[nextSameTripIndex], nextSameTripIndex) : NaN;
+      await addRow({
+        tripNo: row.tripNo,
+        productName: "",
+        batchNo: "",
+        tankCode: "",
+        bags: "",
+        kg: "",
+        pallets: "",
+        packType: "",
+        remark: row.remark || "Plastic pallet (60)",
+        location: ""
+      }, { sortOrder: orderBetween(currentOrder, nextOrder) });
+    }
+
+    async function insertTripAfter(id){
+      const row = rowsCache.find(r => r.id === id);
+      if(!row) return;
+      const baseTrip = num(row.tripNo);
+      const updates = {};
+      for(const r of rowsCache){
+        const trip = num(r.tripNo);
+        if(trip > baseTrip){
+          updates[`${r.id}/tripNo`] = trip + 1;
+          updates[`${r.id}/updatedAt`] = serverTimestamp();
+        }
+      }
+      if(Object.keys(updates).length) await update(rowsRootRef(), updates);
+      await addRow({
+        tripNo: baseTrip + 1,
+        productName: "",
+        batchNo: "",
+        tankCode: "",
+        bags: "",
+        kg: "",
+        pallets: "",
+        packType: "",
+        remark: "Plastic pallet (60)",
+        location: ""
+      }, { sortOrder: nextDefaultSortOrder() });
+    }
+
+    function markUnsaved(el){
+      el.classList.add("dirty");
+      el.classList.remove("saved-flash");
+      el.dataset.pendingValue = el.value;
+      el.title = "ยังไม่บันทึก: กด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึก";
+    }
+
+    function discardUnsaved(el){
+      el.classList.remove("dirty", "saving");
+      delete el.dataset.pendingValue;
+      renderRows();
+    }
+
+    async function commitSave(el, keepFocus=false){
+      const id = el.dataset.id;
+      const field = el.dataset.field;
+      if(!id || !field || el.dataset.saving === "1") return;
+
+      const key = `${id}:${field}`;
+      clearTimeout(saveTimers.get(key));
+
+      const rawValue = el.value;
+      el.dataset.saving = "1";
+      el.classList.remove("dirty");
+      el.classList.add("saving");
+      el.title = "กำลังบันทึก...";
+
+      try{
+        let value = rawValue;
+        if(["tripNo","bags","kg","pallets"].includes(field)){
+          value = value === "" ? "" : Number(value);
+        }
+        if(field === "packType"){
+          value = normalizePackType(value);
+        }
+        if(field === "location"){
+          // ไม่บังคับตรวจว่าโลมีในระบบ เพื่อให้พิมพ์หมายเหตุเองได้อิสระ
+          await saveLocationForTank(id, value);
+        }else{
+          const currentRow = rowsCache.find(r => r.id === id) || {};
+          const saveValue = field === "tankCode" ? normalizedTank(value) : value;
+          const payload = {
+            [field]: saveValue,
+            updatedAt: serverTimestamp()
+          };
+
+          if(field === "bags"){
+            const type = normalizePackType(currentRow.packType);
+            const autoKg = kgFromBagsAndPackType(saveValue, type);
+            if(autoKg !== "") payload.kg = autoKg;
+          }
+
+          if(field === "kg"){
+            const type = calcPackType(currentRow.bags, saveValue);
+            if(type) payload.packType = type;
+          }
+
+          if(field === "packType"){
+            const autoKg = kgFromBagsAndPackType(currentRow.bags, saveValue);
+            if(autoKg !== "") payload.kg = autoKg;
+          }
+
+          await update(rowRef(id), payload);
+          if(field === "tankCode"){
+            await applyLocationAfterProductOrTankChange(id, currentRow.productName, saveValue);
+          }
+          if(field === "productName"){
+            await saveProductOption(saveValue);
+            await applyLocationAfterProductOrTankChange(id, saveValue, currentRow.tankCode);
+          }
+        }
+        el.classList.remove("saving");
+        el.classList.add("saved-flash");
+        el.title = "บันทึกแล้ว / ซิงก์เรียลไทม์แล้ว";
+        delete el.dataset.pendingValue;
+        renderTotals();
+
+        // ถ้าบันทึกด้วย Enter ให้ render ใหม่เพื่อจัดกลุ่ม/รวม Location ทันที
+        // ถ้าบันทึกด้วย blur ปล่อยให้ onValue จาก Firebase render ตามข้อมูลจริง
+        if(keepFocus){
+          renderRows();
+          const next = tbody.querySelector(`[data-id="${CSS.escape(id)}"][data-field="${CSS.escape(field)}"]`);
+          if(next){
+            next.focus();
+            if(typeof next.select === "function") next.select();
+          }
+        }
+      }catch(err){
+        console.error(err);
+        el.classList.remove("saving");
+        el.classList.add("dirty");
+        el.title = "บันทึกไม่สำเร็จ: กด Enter อีกครั้ง";
+        alert("บันทึกไม่สำเร็จ กรุณาลองกด Enter อีกครั้ง");
+      }finally{
+        delete el.dataset.saving;
+      }
+    }
+
+    async function duplicateRow(id){
+      const row = rowsCache.find(r => r.id === id);
+      if(!row) return;
+      const { id:_, createdAt, updatedAt, ...data } = row;
+      await addRow({
+        ...data,
+        tripNo: rowsCache.length ? Math.max(...rowsCache.map(r => num(r.tripNo))) + 1 : 1
+      });
+    }
+
+    async function deleteRow(id){
+      if(confirm("ต้องการลบแถวนี้ใช่ไหม?")){
+        await remove(rowRef(id));
+      }
+    }
+
+
+    function calcExportRemark(totalBags, totalKg, fallbackRemark=""){
+      const bags = num(totalBags);
+      const kg = num(totalKg);
+      if(!bags || !kg) return fallbackRemark || "";
+
+      // ใช้สูตร Kg ÷ Bag: 25 = PP, 850 = JB
+      // เผื่อทศนิยมเล็กน้อยจากการกรอกข้อมูล จึงใช้ tolerance
+      const kgPerBag = kg / bags;
+      if(Math.abs(kgPerBag - 25) < 0.0001) return "PP";
+      if(Math.abs(kgPerBag - 850) < 0.0001) return "JB";
+      return fallbackRemark || "";
+    }
+
+    function rowsForPlanExport(rows){
+      return [...rows]
+        .filter(r => fields.some(field => String(r?.[field] ?? '').trim()))
+        .sort((a,b) => {
+          const tripDiff = num(a.tripNo) - num(b.tripNo);
+          if(tripDiff) return tripDiff;
+          return rowOrderValue(a) - rowOrderValue(b);
+        });
+    }
+
+    // CSV เก็บข้อมูลตามคอลัมน์ในภาพ ส่วนการ merge เซลล์ สี และเส้นกรอบ
+    // จะอยู่ในปุ่ม “ส่งออก Excel ตามสีหน้าเว็บ” เพราะไฟล์ CSV ไม่รองรับรูปแบบเหล่านั้น
+    function toCSV(rows){
+      const exportRows = rowsForPlanExport(rows);
+      const head = [
+        "Date","No.","Product name","Batch No.","Tank code",
+        "Quantity (bag)","Quantity (Kg)","Quantity","Remark","LOCATION"
+      ];
+      const lines = exportRows.map(r => [
+        formatDateThaiLike(currentDate),
+        String(r.tripNo ?? '').trim(),
+        String(r.productName ?? '').trim(),
+        String(r.batchNo ?? '').trim(),
+        String(r.tankCode ?? '').trim(),
+        num(r.bags) || '',
+        num(r.kg) || '',
+        num(r.pallets) || '',
+        String(r.remark ?? '').trim(),
+        getDisplayLocation(r)
+      ].map(csvCell).join(','));
+
+      const totalBags = exportRows.reduce((sum, r) => sum + num(r.bags), 0);
+      const totalKg = exportRows.reduce((sum, r) => sum + num(r.kg), 0);
+      const totalPallets = exportRows.reduce((sum, r) => sum + num(r.pallets), 0);
+      const totalLine = ["","","","","TOTAL",totalBags,totalKg,totalPallets,"",""]
+        .map(csvCell).join(',');
+
+      return [head.map(csvCell).join(','), ...lines, totalLine].join("\n");
+    }
+
+    function csvCell(v){
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+    }
+
+    function downloadText(filename, text){
+      const blob = new Blob(["\ufeff", text], {type:"text/csv;charset=utf-8"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+
+    function planExportStyles(page=currentPage){
+      const thin = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'thin', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const mediumBottom = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'medium', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const center = { horizontal:'center', vertical:'center', wrapText:true };
+      const left = { horizontal:'left', vertical:'center', wrapText:true };
+      const font = { name:'Tahoma', sz:10, color:{rgb:'000000'} };
+      const pageCode = String(page || '').toUpperCase();
+      const isPTR = pageCode === 'PTR';
+      const isOUT = pageCode === OUTBOUND_PAGE;
+
+      // ใช้ชุดสีเดียวกับหน้าเว็บจริง ไม่อิงสีจากภาพตัวอย่าง
+      const palette = isPTR ? {
+        pageBg:'F1FBF4',
+        title:'F1FBF4',
+        header:'D9F5DF',
+        locationHeader:'C9EFB8',
+        shadeA:'FFFFFF',
+        shadeB:'DFF3E6',
+        locationA:'FFFBE6',
+        locationB:'E6F6CF',
+        total:'D9F5DF',
+        exportRow:'FFF3A3'
+      } : (isOUT ? {
+        pageBg:'FFF7ED',
+        title:'FFF7ED',
+        header:'FFEDD5',
+        locationHeader:'FBBF24',
+        shadeA:'FFFFFF',
+        shadeB:'FFF7ED',
+        locationA:'FFFBEB',
+        locationB:'FFFBEB',
+        total:'FFEDD5',
+        exportRow:'FFF3A3'
+      } : {
+        pageBg:'F4F7F9',
+        title:'F4F7F9',
+        header:'BFE8F3',
+        locationHeader:'FFE600',
+        shadeA:'FFFFFF',
+        shadeB:'E9F6FB',
+        locationA:'FFFBE6',
+        locationB:'FFFBE6',
+        total:'BFE8F3',
+        exportRow:'FFF3A3'
+      });
+
+      const makeBorder = (groupStart=false, groupEnd=false) => ({
+        top:{style:groupStart ? 'medium' : 'thin', color:{rgb:'000000'}},
+        bottom:{style:groupEnd ? 'medium' : 'thin', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      });
+      const makeStyle = (fill, alignment=center, options={}) => ({
+        font:{
+          ...font,
+          ...(options.bold ? {bold:true} : {}),
+          ...(options.sz ? {sz:options.sz} : {}),
+          ...(options.fontColor ? {color:{rgb:options.fontColor}} : {})
+        },
+        alignment,
+        fill:{fgColor:{rgb:fill}},
+        border:options.border || thin,
+        ...(options.numFmt ? {numFmt:options.numFmt} : {})
+      });
+
+      return {
+        palette,
+        makeBorder,
+        makeCenter:(fill, options={}) => makeStyle(fill, center, options),
+        makeLeft:(fill, options={}) => makeStyle(fill, left, options),
+        title:makeStyle(palette.title, center, {bold:true, sz:12}),
+        header:makeStyle(palette.header, center, {bold:true, border:mediumBottom}),
+        locationHeader:makeStyle(palette.locationHeader, center, {bold:true, sz:11, border:mediumBottom}),
+        total:makeStyle(palette.total, center, {bold:true, numFmt:'#,##0.00'})
+      };
+    }
+
+    function setPlanCell(ws, row, col, value, style, type){
+      const addr = XLSX.utils.encode_cell({r:row, c:col});
+      ws[addr] = { v:value ?? '', t:type || (typeof value === 'number' ? 'n' : 's'), s:style };
+      return ws[addr];
+    }
+
+    function createPlanSheetLikeImage(rows){
+      const exportRows = rowsForPlanExport(rows);
+      const styles = planExportStyles(currentPage);
+      const palette = styles.palette;
+      const titleRow = 0;
+      const headerRow = 2;
+      const dataStart = 3;
+      const totalRow = dataStart + exportRows.length;
+      const ws = XLSX.utils.aoa_to_sheet(Array.from({length:Math.max(totalRow + 1, 5)}, () => Array(10).fill('')));
+      ws['!merges'] = [];
+
+      const dateObj = jsDateFromISO(currentDate);
+      const thaiYear = dateObj.getFullYear() + 543;
+      const monthName = MONTH_FULL_TH[dateObj.getMonth()] || '';
+      const title = `แผนการขนย้ายสินค้าไปคลังสินค้าด้านนอก (KNS)  เดือน${monthName} ${thaiYear}`;
+      setPlanCell(ws, titleRow, 0, title, styles.title);
+      ws['!merges'].push({s:{r:titleRow,c:0}, e:{r:titleRow,c:9}});
+      for(let c=1; c<10; c++) setPlanCell(ws, titleRow, c, '', styles.title);
+
+      const headers = [
+        'Date','No.','Product name','Batch No.','Tank code',
+        'Quantity (bag)','Quantity (Kg)','Quantity','Remark','LOCATION'
+      ];
+      headers.forEach((header, col) => setPlanCell(ws, headerRow, col, header, col === 9 ? styles.locationHeader : styles.header));
+
+      const tripRanges = new Map();
+      let previousShadeKey = null;
+      let shadeIndex = -1;
+
+      exportRows.forEach((row, index) => {
+        const sheetRow = dataStart + index;
+        const trip = String(row.tripNo ?? '').trim();
+        const previousRow = exportRows[index - 1];
+        const nextRow = exportRows[index + 1];
+        const isGroupStart = index === 0 || String(previousRow?.tripNo ?? '').trim() !== trip;
+        const isGroupEnd = index === exportRows.length - 1 || String(nextRow?.tripNo ?? '').trim() !== trip;
+        const border = styles.makeBorder(isGroupStart, isGroupEnd);
+
+        // หน้าเว็บสลับสีตาม Product name + Tank code ที่อยู่ติดกัน
+        const shadeKey = makeProductTankKey(row.productName, row.tankCode) || `__ROW_${index}`;
+        if(shadeKey !== previousShadeKey){
+          shadeIndex++;
+          previousShadeKey = shadeKey;
+        }
+        const shadeB = shadeIndex % 2 === 1;
+        let rowFill = shadeB ? palette.shadeB : palette.shadeA;
+        let locationFill = shadeB ? palette.locationB : palette.locationA;
+        let locationFontColor = '000000';
+
+        // ใช้สีสถานะและแถวส่งออกแบบเดียวกับหน้าเว็บ
+        const status = tripStatusForRow(row);
+        if(status === 'ok'){
+          rowFill = shadeB ? 'C8F0D6' : 'E3F8EA';
+          locationFill = 'DBF7E5';
+        }else if(status === 'mismatch'){
+          rowFill = shadeB ? 'FFD1DA' : 'FFE8EC';
+          locationFill = 'FFE1E7';
+        }else if(status === 'rollover'){
+          rowFill = shadeB ? 'FFE4A3' : 'FFF2C9';
+          locationFill = 'FFEDBD';
+        }
+        if(hasExportLocation(row)){
+          rowFill = palette.exportRow;
+          locationFill = palette.exportRow;
+          locationFontColor = 'D92D20';
+        }
+
+        const values = [
+          formatDateThaiLike(currentDate), trip, String(row.productName ?? '').trim(),
+          String(row.batchNo ?? '').trim(), String(row.tankCode ?? '').trim(),
+          num(row.bags) || '', num(row.kg) || '', num(row.pallets) || '',
+          String(row.remark ?? '').trim(), getDisplayLocation(row)
+        ];
+
+        values.forEach((value, col) => {
+          const isLocation = col === 9;
+          const fill = isLocation ? locationFill : rowFill;
+          const isTextLeft = col === 2 || col === 8 || col === 9;
+          const options = {
+            border,
+            ...(isLocation && locationFontColor !== '000000' ? {fontColor:locationFontColor, bold:true} : {})
+          };
+          if(col === 5 || col === 7) options.numFmt = '#,##0';
+          if(col === 6) options.numFmt = '#,##0.00';
+          const style = isTextLeft ? styles.makeLeft(fill, options) : styles.makeCenter(fill, options);
+          setPlanCell(ws, sheetRow, col, value, style, typeof value === 'number' ? 'n' : 's');
+        });
+
+        const key = trip || `__row_${index}`;
+        if(!tripRanges.has(key)) tripRanges.set(key, {start:sheetRow, end:sheetRow});
+        tripRanges.get(key).end = sheetRow;
+      });
+
+      if(exportRows.length){
+        ws['!merges'].push({s:{r:dataStart,c:0}, e:{r:dataStart + exportRows.length - 1,c:0}});
+        for(const range of tripRanges.values()){
+          if(range.end > range.start){
+            ws['!merges'].push({s:{r:range.start,c:1}, e:{r:range.end,c:1}});
+          }
+        }
+      }
+
+      const totalBags = exportRows.reduce((sum, row) => sum + num(row.bags), 0);
+      const totalKg = exportRows.reduce((sum, row) => sum + num(row.kg), 0);
+      const totalPallets = exportRows.reduce((sum, row) => sum + num(row.pallets), 0);
+      for(let c=0; c<10; c++) setPlanCell(ws, totalRow, c, '', styles.total);
+      setPlanCell(ws, totalRow, 4, 'TOTAL', styles.total);
+      setPlanCell(ws, totalRow, 5, totalBags, {...styles.total, numFmt:'#,##0'}, 'n');
+      setPlanCell(ws, totalRow, 6, totalKg, {...styles.total, numFmt:'#,##0.00'}, 'n');
+      setPlanCell(ws, totalRow, 7, totalPallets, {...styles.total, numFmt:'#,##0'}, 'n');
+
+      ws['!cols'] = [
+        {wch:13},{wch:8},{wch:34},{wch:22},{wch:22},
+        {wch:16},{wch:16},{wch:14},{wch:44},{wch:24}
+      ];
+      ws['!rows'] = Array.from({length:totalRow + 1}, (_, i) => ({hpt:i === titleRow ? 34 : (i === headerRow ? 28 : 25)}));
+      ws['!freeze'] = {xSplit:0, ySplit:dataStart};
+      ws['!autofilter'] = {ref:XLSX.utils.encode_range({s:{r:headerRow,c:0}, e:{r:Math.max(totalRow - 1, headerRow),c:9}})};
+      ws['!pageSetup'] = {orientation:'landscape', fitToWidth:1, fitToHeight:0, paperSize:9};
+      ws['!margins'] = {left:0.2, right:0.2, top:0.45, bottom:0.45, header:0.2, footer:0.2};
+      ws['!printArea'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:totalRow,c:9}});
+      return ws;
+    }
+
+    function exportPlanExcelLikeImage(){
+      if(!ensureExcelLibrary()) return;
+      if(!rowsCache.length){
+        alert('ยังไม่มีข้อมูลสำหรับส่งออก');
+        return;
+      }
+      const wb = XLSX.utils.book_new();
+      const ws = createPlanSheetLikeImage(rowsCache);
+      XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`${currentPage} ${currentDate}`));
+      downloadWorkbook(wb, `KNS-${currentPage}-${currentDate}-สีตามหน้าเว็บ.xlsx`);
+    }
+
+    function ensureExcelLibrary(){
+      if(!window.XLSX){
+        alert("ยังโหลดระบบสร้าง Excel ไม่เสร็จ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+        return false;
+      }
+      return true;
+    }
+
+    const MONTH_SHORT_EN = ["Jan","Feb","Mar","APR","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const MONTH_FULL_TH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+    const DAY_TH = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+    const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+
+    function excelSerialFromDate(date){
+      const d = new Date(date);
+      return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - EXCEL_EPOCH) / 86400000);
+    }
+
+    function jsDateFromISO(iso){
+      const [y,m,d] = String(iso || '').split('-').map(Number);
+      return new Date(y || 1970, (m || 1) - 1, d || 1);
+    }
+
+    function monthDays(year, monthIndex){
+      return new Date(year, monthIndex + 1, 0).getDate();
+    }
+
+    function sheetNameSafe(name){
+      return String(name).replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31);
+    }
+
+    function cellAddr(row, col){
+      return XLSX.utils.encode_cell({ r: row, c: col });
+    }
+
+    function setCell(ws, row, col, value, style=null, type=null){
+      const addr = cellAddr(row, col);
+      const cell = ws[addr] || {};
+      cell.v = value;
+      if(type) cell.t = type;
+      if(style) cell.s = style;
+      ws[addr] = cell;
+      return cell;
+    }
+
+    function setFormula(ws, row, col, formula, style=null){
+      const addr = cellAddr(row, col);
+      ws[addr] = { t:'n', f:formula };
+      if(style) ws[addr].s = style;
+    }
+
+    function applyRangeStyle(ws, r1, c1, r2, c2, style){
+      for(let r=r1; r<=r2; r++){
+        for(let c=c1; c<=c2; c++){
+          const addr = cellAddr(r,c);
+          ws[addr] = ws[addr] || { t:'s', v:'' };
+          ws[addr].s = { ...(ws[addr].s || {}), ...style };
+        }
+      }
+    }
+
+    function downloadWorkbook(wb, filename){
+      XLSX.writeFile(wb, filename, { bookType:'xlsx', cellStyles:true });
+    }
+
+    function excelBaseStyles(){
+      const border = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'thin', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const mediumBorder = {
+        top:{style:'thin', color:{rgb:'000000'}},
+        bottom:{style:'medium', color:{rgb:'000000'}},
+        left:{style:'thin', color:{rgb:'000000'}},
+        right:{style:'thin', color:{rgb:'000000'}}
+      };
+      const center = { horizontal:'center', vertical:'center', wrapText:true };
+      const left = { horizontal:'left', vertical:'center', wrapText:true };
+      return {
+        border,
+        title:{ font:{bold:true, sz:14}, alignment:center, fill:{fgColor:{rgb:'FFFFFF'}}, border },
+        header:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border:mediumBorder },
+        headerGreen:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'E2F0D9'}}, border:mediumBorder },
+        normal:{ font:{sz:10}, alignment:center, border },
+        normalBold:{ font:{bold:true, sz:10}, alignment:center, border },
+        text:{ font:{sz:10}, alignment:left, border },
+        textBold:{ font:{bold:true, sz:10}, alignment:left, border },
+        integer:{ font:{sz:10}, alignment:center, numFmt:'#,##0', border },
+        number:{ font:{sz:10}, alignment:center, numFmt:'#,##0.0', border },
+        stp:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        stpText:{ font:{sz:10}, alignment:left, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        stpBold:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        ptr:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FFFF00'}}, border },
+        ptrText:{ font:{sz:10}, alignment:left, fill:{fgColor:{rgb:'FFFF00'}}, border },
+        ptrBold:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFFF00'}}, border },
+        blueNum:{ font:{bold:true, sz:10, color:{rgb:'0000FF'}}, alignment:center, numFmt:'#,##0', border },
+        redNum:{ font:{bold:true, sz:10, color:{rgb:'FF0000'}}, alignment:center, numFmt:'#,##0', border },
+        blueText:{ font:{bold:true, sz:10, color:{rgb:'0000FF'}}, alignment:left, border },
+        greenText:{ font:{bold:true, sz:10, color:{rgb:'00B050'}}, alignment:left, border },
+        redText:{ font:{bold:true, sz:10, color:{rgb:'FF0000'}}, alignment:left, border },
+        balanceDate:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
+        redFill:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FF0000'}}, border },
+        total:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border },
+        blank:{ border }
+      };
+    }
+
+    function parseRoundInfo(row, fallbackPage='STP'){
+      // กรองรอบรถให้ชัดเจนก่อนรวม Weekly:
+      // R...  = STP, R...A = PTR
+      // รองรับข้อมูลเดิมที่อาจกรอกเป็น 1, R1, 1A หรือ R1A เพื่อไม่ให้ STP/PTR ปนกัน
+      const rawTrip = String(row?.tripNo ?? '').trim().toUpperCase().replace(/\s+/g, '');
+      const basePage = String(row?.page || fallbackPage || 'STP').toUpperCase() === 'PTR' ? 'PTR' : 'STP';
+      const matched = rawTrip.match(/^R?(\d+)(A)?$/);
+      const tripNo = matched ? matched[1] : rawTrip.replace(/^R/i, '').replace(/A$/i, '');
+      const page = matched?.[2] === 'A' ? 'PTR' : basePage;
+      const round = tripNo ? (page === 'PTR' ? `R${tripNo}A` : `R${tripNo}`) : '';
+      return { page, tripNo, round };
+    }
+
+    function normalizeRowForWeeklyExport(row, page, date){
+      const withContext = { ...row, page, date };
+      const round = parseRoundInfo(withContext, page);
+      return {
+        ...withContext,
+        originalPage: page,
+        page: round.page,
+        tripNo: round.tripNo,
+        exportRound: round.round
+      };
+    }
+
+    function rowsFromSnapshot(raw, page, year){
+      const out = [];
+      for(const [date, dateData] of Object.entries(raw || {})){
+        if(!date.startsWith(`${year}-`)) continue;
+        const rowsObj = dateData?.rows || dateData || {};
+        const rows = sortRows(rowsObj).map(row => normalizeRowForWeeklyExport(row, page, date));
+        out.push(...rows);
+      }
+      return out;
+    }
+
+    async function getRowsForExportYear(year){
+      const pages = ["STP", "PTR"];
+      const all = [];
+      for(const page of pages){
+        const snap = await get(ref(db, `${pageRoot(page)}/plans`));
+        all.push(...rowsFromSnapshot(snap.val() || {}, page, year));
+      }
+      // fallback สำหรับข้อมูล STP เก่าที่เคยอยู่ path knsTransport/plans/yyyy-mm-dd/rows
+      const legacySnap = await get(ref(db, `knsTransport/plans`));
+      const legacyRows = rowsFromSnapshot(legacySnap.val() || {}, "STP", year).map(row => ({ ...row, legacy:true }));
+      const known = new Set(all.map(r => `${r.page}|${r.date}|${r.tripNo}|${r.productName}|${r.batchNo}|${r.tankCode}|${r.bags}|${r.kg}`));
+      for(const row of legacyRows){
+        const key = `${row.page}|${row.date}|${row.tripNo}|${row.productName}|${row.batchNo}|${row.tankCode}|${row.bags}|${row.kg}`;
+        if(!known.has(key)) all.push(row);
+      }
+      return all.sort((a,b) => {
+        const dateDiff = String(a.date).localeCompare(String(b.date));
+        if(dateDiff) return dateDiff;
+        const pageOrder = (a.page === 'STP' ? 0 : 1) - (b.page === 'STP' ? 0 : 1);
+        if(pageOrder) return pageOrder;
+        const tripDiff = num(a.tripNo) - num(b.tripNo);
+        if(tripDiff) return tripDiff;
+        return String(a.productName || '').localeCompare(String(b.productName || ''), 'th');
+      });
+    }
+
+    function roundText(row){
+      const parsed = parseRoundInfo(row, row.page);
+      return row.exportRound || parsed.round;
+    }
+
+    function productType(row){
+      return normalizePackType(row.packType) || calcPackType(row.bags, row.kg) || '';
+    }
+
+    function originalPlanQty(row){
+      // Weekly: Original Plan Q'ty ใช้จำนวน Q'ty จริงในแผน (Quantity bag)
+      // ถ้าแถวเก่าบางรายการไม่มี bags ให้ fallback เป็น pallets เพื่อไม่ให้ข้อมูลหาย
+      const bagsValue = num(row.bags);
+      if(bagsValue) return bagsValue;
+      return num(row.pallets);
+    }
+
+    function groupRowsForWeekly(monthRows){
+      // จัดกลุ่มตาม "วัน + หน้า STP/PTR + คันรถ R... + Product name + Type"
+      // ถ้าในคันเดียวกันมี Product name เดียวกันหลายแถว ให้รวมเป็นหัวเดียว และรวม Original Plan Q'ty
+      const grouped = new Map();
+      for(const row of monthRows){
+        const type = productType(row);
+        const key = [row.date, row.page, row.tripNo, normalizedProduct(row.productName), type].join('|');
+        if(!grouped.has(key)){
+          grouped.set(key, {
+            ...row,
+            productName: String(row.productName || '').trim(),
+            type,
+            originalQty:0,
+            bags:0,
+            kg:0,
+            pallets:0,
+            batchNos:new Set(),
+            tankCodes:new Set(),
+            sourceRows:0
+          });
+        }
+        const item = grouped.get(key);
+        item.originalQty += originalPlanQty(row);
+        item.bags += num(row.bags);
+        item.kg += num(row.kg);
+        item.pallets += num(row.pallets);
+        if(String(row.batchNo || '').trim()) item.batchNos.add(String(row.batchNo).trim());
+        if(String(row.tankCode || '').trim()) item.tankCodes.add(String(row.tankCode).trim());
+        item.sourceRows += 1;
+      }
+      return Array.from(grouped.values()).map(item => ({
+        ...item,
+        batchNo:[...item.batchNos].join('\n'),
+        tankCode:[...item.tankCodes].join('\n')
+      })).sort((a,b) => {
+        const dateDiff = String(a.date).localeCompare(String(b.date));
+        if(dateDiff) return dateDiff;
+        const pageOrder = (a.page === 'STP' ? 0 : 1) - (b.page === 'STP' ? 0 : 1);
+        if(pageOrder) return pageOrder;
+        const tripDiff = num(a.tripNo) - num(b.tripNo);
+        if(tripDiff) return tripDiff;
+        return String(a.productName || '').localeCompare(String(b.productName || ''), 'th');
+      });
+    }
+
+    function dayDateText(date){
+      const d = jsDateFromISO(date);
+      return `${Number(String(date).slice(8,10))}-${MONTH_SHORT_EN[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
+    }
+
+    function createWeeklySheet(year, monthIndex, monthRows){
+      const st = excelBaseStyles();
+      const dataRows = groupRowsForWeekly(monthRows.filter(row => Number(String(row.date).slice(5,7)) === monthIndex + 1));
+
+      // ให้ตาราง Weekly เริ่มที่เซลล์ E8 ตามที่ต้องการ
+      // startRow/startCol เป็น index แบบ 0-based: E8 = row 7, col 4
+      const startRow = 7;
+      const startCol = 4;
+      const tableColCount = 17; // E:U เมื่อเลื่อนจากโครงเดิม A:Q
+      const headerRow = startRow + 2; // แถว filter/header หลัก = E10:U10
+      const bodyStart = startRow + 3; // แถวข้อมูลเริ่มที่ E11
+      const minTableRows = 40;
+      const totalRows = Math.max(startRow + minTableRows, bodyStart + dataRows.length + 8);
+      const totalCols = startCol + tableColCount;
+      const aoa = Array.from({length: totalRows}, () => Array(totalCols).fill(''));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const col = (relativeCol) => startCol + relativeCol;
+      const row = (relativeRow) => startRow + relativeRow;
+      const colName = (relativeCol) => XLSX.utils.encode_col(col(relativeCol));
+      const tableRange = (r1, c1, r2, c2) => ({s:{r:row(r1), c:col(c1)}, e:{r:row(r2), c:col(c2)}});
+      const absoluteTableEndCol = col(tableColCount - 1);
+
+      ws['!cols'] = [
+        {wch:3},{wch:3},{wch:3},{wch:3},
+        {wch:13},{wch:13},{wch:10},{wch:34},{wch:18},{wch:34},{wch:7},
+        {wch:13},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:13},
+        {wch:9},{wch:9},{wch:12}
+      ];
+      ws['!rows'] = Array.from({length: totalRows}, (_,i) => ({ hpt: i >= startRow && i < startRow + 2 ? 24 : 20 }));
+      ws['!merges'] = [];
+
+      const groupHeader = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, sz:9, color:{rgb:'0000FF'}},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true, textRotation:90},
+        fill:{fgColor:{rgb:'FFFFFF'}}
+      };
+      const groupHeaderGreen = {
+        ...st.headerGreen,
+        font:{...(st.headerGreen.font || {}), bold:true, sz:9},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true, textRotation:90},
+        fill:{fgColor:{rgb:'92D050'}}
+      };
+      const subHeaderBlue = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, color:{rgb:'0000FF'}},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true}
+      };
+      const subHeaderGreen = {
+        ...st.headerGreen,
+        font:{...(st.headerGreen.font || {}), bold:true},
+        alignment:{horizontal:'center', vertical:'center', wrapText:true},
+        fill:{fgColor:{rgb:'92D050'}}
+      };
+      const headerWhite = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, sz:12},
+        fill:{fgColor:{rgb:'D9D9D9'}}
+      };
+      const typeHeader = {
+        ...st.header,
+        font:{...(st.header.font || {}), bold:true, sz:9},
+        fill:{fgColor:{rgb:'D9D9D9'}}
+      };
+
+      // แถวบนสุดเหมือนภาพอ้างอิง แต่เริ่มที่ E8
+      setCell(ws, row(0), col(0), `ตารางสรุปนำเข้า (Inbound) ประจำเดือน ${MONTH_FULL_TH[monthIndex]}`, st.title);
+      ws['!merges'].push(tableRange(0, 0, 0, 6));
+
+      setCell(ws, row(0), col(7), "Original\nPlan\nQ'ty", groupHeader);
+      setCell(ws, row(0), col(8), 'Revise\n1', groupHeader);
+      setCell(ws, row(0), col(9), 'Revise\n2', groupHeader);
+      setCell(ws, row(0), col(10), 'Revise\n3', groupHeader);
+      setCell(ws, row(0), col(11), 'Revise\n4', groupHeader);
+      setCell(ws, row(0), col(12), 'Revise\n5', groupHeader);
+      setCell(ws, row(0), col(13), 'Actual\nShip', groupHeaderGreen);
+      ws['!merges'].push(tableRange(0, 13, 0, 15));
+      setCell(ws, row(0), col(16), 'Total Ctn', headerWhite);
+      ws['!merges'].push(tableRange(0, 16, 2, 16));
+
+      // หัวย่อย Pallet / JB / PP
+      for(let c=7; c<=13; c++) setCell(ws, row(1), col(c), 'Pallet', c === 13 ? subHeaderGreen : subHeaderBlue);
+      setCell(ws, row(1), col(14), 'JB', subHeaderGreen);
+      setCell(ws, row(1), col(15), 'PP', subHeaderGreen);
+
+      // หัวหลักแถว filter
+      const headers = ['Day','Date','Round','Products','Add Code','Ref Name','Ty'];
+      headers.forEach((h, i) => setCell(ws, row(2), col(i), h, i === 6 ? typeHeader : headerWhite));
+      for(let c=7; c<=15; c++) setCell(ws, row(2), col(c), '', c >= 13 ? subHeaderGreen : subHeaderBlue);
+
+      if(!dataRows.length){
+        applyRangeStyle(ws, startRow, startCol, startRow + 8, absoluteTableEndCol, st.blank);
+        return ws;
+      }
+
+      const dateRanges = new Map();
+      const truckRanges = new Map();
+      let rowIndex = bodyStart;
+
+      for(const rowData of dataRows){
+        const d = jsDateFromISO(rowData.date);
+        const type = rowData.type || productType(rowData);
+        const fillBase = rowData.page === 'PTR' ? st.ptr : st.stp;
+        const textBase = rowData.page === 'PTR' ? st.ptrText : st.stpText;
+        const boldBase = rowData.page === 'PTR' ? st.ptrBold : st.stpBold;
+        const originalQty = num(rowData.originalQty);
+        const dateKey = rowData.date;
+        const truckKey = [rowData.date, rowData.page, rowData.tripNo].join('|');
+
+        if(!dateRanges.has(dateKey)) dateRanges.set(dateKey, {start:rowIndex, end:rowIndex});
+        dateRanges.get(dateKey).end = rowIndex;
+        if(!truckRanges.has(truckKey)) truckRanges.set(truckKey, {start:rowIndex, end:rowIndex, style:boldBase});
+        truckRanges.get(truckKey).end = rowIndex;
+
+        setCell(ws, rowIndex, col(0), DAY_TH[d.getDay()], st.normalBold);
+        setCell(ws, rowIndex, col(1), dayDateText(rowData.date), st.normalBold);
+        setCell(ws, rowIndex, col(2), roundText(rowData), boldBase);        // R... = คันรถ
+        setCell(ws, rowIndex, col(3), rowData.productName || '', textBase); // รวม Product name เดียวกันในคันแล้ว
+        setCell(ws, rowIndex, col(4), '', fillBase);                        // Add Code ปล่อยว่างตามที่ต้องการ
+        setCell(ws, rowIndex, col(5), rowData.productName || '', textBase); // Ref Name = Product name
+        setCell(ws, rowIndex, col(6), type, boldBase);
+        // Original Plan Q'ty ต้องเป็นตัวเลขจริงเท่านั้น ไม่ใช่สูตร/ข้อความ เพื่อให้ SUMIF/JB/PP คำนวณต่อได้ถูกต้อง
+        setCell(ws, rowIndex, col(7), originalQty, st.blueNum, 'n');         // Original Plan Q'ty
+        for(let c=8; c<=12; c++) setCell(ws, rowIndex, col(c), '', fillBase);
+        // Actual Ship > Pallet ใส่สูตร = Original Plan Q'ty ของแถวนั้น เพื่อให้ลากลงต่อได้
+        setFormula(ws, rowIndex, col(13), `${colName(7)}${rowIndex + 1}`, st.redNum);
+        setCell(ws, rowIndex, col(14), '', st.normalBold);
+        setCell(ws, rowIndex, col(15), '', st.normalBold);
+        setCell(ws, rowIndex, col(16), '', st.normalBold);
+        rowIndex++;
+      }
+
+      // Merge Round ตามคันรถ R... กรณีในคันเดียวกันมีหลาย Product
+      for(const range of truckRanges.values()){
+        if(range.end > range.start){
+          ws['!merges'].push({s:{r:range.start,c:col(2)}, e:{r:range.end,c:col(2)}});
+        }
+      }
+
+      // Merge Day / Date / JB / PP / Total Ctn ตามวัน และใส่สูตรรวมรายวัน
+      for(const [dateKey, range] of dateRanges.entries()){
+        const r1 = range.start;
+        const r2 = range.end;
+        const excelStart = r1 + 1;
+        const excelEnd = r2 + 1;
+        if(r2 > r1){
+          ws['!merges'].push({s:{r:r1,c:col(0)}, e:{r:r2,c:col(0)}});
+          ws['!merges'].push({s:{r:r1,c:col(1)}, e:{r:r2,c:col(1)}});
+          // JB, PP และ Total Ctn merge ตามวัน
+          for(const c of [14,15,16]) ws['!merges'].push({s:{r:r1,c:col(c)}, e:{r:r2,c:col(c)}});
+        }
+        // JB / PP = SUMIF ตาม Type ของวันนั้น โดยอิงจากคอลัมน์ Actual Ship > Pallet
+        setFormula(ws, r1, col(14), `SUMIF($${colName(6)}${excelStart}:$${colName(6)}${excelEnd},"JB",$${colName(13)}${excelStart}:$${colName(13)}${excelEnd})`, st.normalBold);
+        setFormula(ws, r1, col(15), `SUMIF($${colName(6)}${excelStart}:$${colName(6)}${excelEnd},"PP",$${colName(13)}${excelStart}:$${colName(13)}${excelEnd})`, st.normalBold);
+        setFormula(ws, r1, col(16), `${colName(14)}${excelStart}+${colName(15)}${excelStart}`, st.normalBold);
+      }
+
+      const totalRow = rowIndex + 1;
+      setCell(ws, totalRow, col(6), 'Total', st.total);
+      setFormula(ws, totalRow, col(7), `SUM(${colName(7)}${bodyStart + 1}:${colName(7)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(13), `SUM(${colName(13)}${bodyStart + 1}:${colName(13)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(14), `SUM(${colName(14)}${bodyStart + 1}:${colName(14)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(15), `SUM(${colName(15)}${bodyStart + 1}:${colName(15)}${rowIndex})`, st.total);
+      setFormula(ws, totalRow, col(16), `SUM(${colName(16)}${bodyStart + 1}:${colName(16)}${rowIndex})`, st.total);
+      applyRangeStyle(ws, startRow, startCol, totalRow, absoluteTableEndCol, st.blank);
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:headerRow,c:startCol}, e:{r:Math.max(rowIndex, bodyStart + 1), c:absoluteTableEndCol}}) };
+      ws['!freeze'] = { xSplit: 0, ySplit: bodyStart };
+      return ws;
+    }
+
+
+    function monthDateLabel(year, monthIndex, day){
+      return `${day} ${MONTH_SHORT_EN[monthIndex]} ${String(year).slice(2)}`;
+    }
+
+    function createBalanceSheet(year, monthIndex, monthRows){
+      const st = excelBaseStyles();
+      const days = monthDays(year, monthIndex);
+      const aoa = Array.from({length: days + 10}, () => Array(6).fill(''));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{wch:3},{wch:16},{wch:15},{wch:15},{wch:15},{wch:18}];
+      ws['!rows'] = Array.from({length: days + 10}, () => ({hpt:22}));
+      ws['!merges'] = [{s:{r:0,c:1}, e:{r:0,c:5}}];
+      setCell(ws, 0, 1, `Balance of product at KNS KORAT ${year}`, st.title);
+      ['No.','Inbound (Ton.)','Outbound (Ton.)','Diff (Ton.)','Remark'].forEach((h, i) => setCell(ws, 1, 1+i, h, st.header));
+
+      const byDate = new Map();
+      for(const row of monthRows){
+        const key = row.date;
+        byDate.set(key, (byDate.get(key) || 0) + (num(row.kg) / 1000));
+      }
+
+      for(let day=1; day<=days; day++){
+        const iso = `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const r = day + 1;
+        const isWeeklyLine = day % 7 === 0;
+        setCell(ws, r, 1, monthDateLabel(year, monthIndex, day), st.balanceDate);
+        if(isWeeklyLine){
+          for(let c=2; c<=5; c++) setCell(ws, r, c, '', st.redFill);
+        }else{
+          const inbound = byDate.get(iso);
+          setCell(ws, r, 2, inbound ? Number(inbound.toFixed(1)) : '', st.number);
+          setCell(ws, r, 3, '', st.number);
+          setFormula(ws, r, 4, `IF(OR(C${r+1}<>",",D${r+1}<>","),C${r+1}-D${r+1},"")`.replace(/<>","/g,'<>""'), st.number);
+          setCell(ws, r, 5, '', st.text);
+        }
+      }
+
+      const totalRow = days + 2;
+      const avgRow = days + 3;
+      setCell(ws, totalRow, 1, 'Total', st.total);
+      setFormula(ws, totalRow, 2, `SUM(C3:C${days+2})`, {...st.total, font:{...(st.total.font||{}), color:{rgb:'0000FF'}}});
+      setFormula(ws, totalRow, 3, `SUM(D3:D${days+2})`, {...st.total, font:{...(st.total.font||{}), color:{rgb:'00B050'}}});
+      setFormula(ws, totalRow, 4, `SUM(E3:E${days+2})`, {...st.total, font:{...(st.total.font||{}), color:{rgb:'FF0000'}}});
+      setCell(ws, totalRow, 5, '', st.total);
+
+      setCell(ws, avgRow, 1, 'Average Ton. / Day', st.normalBold);
+      setFormula(ws, avgRow, 2, `C${totalRow+1}/COUNT(C3:C${days+2})`, st.blueNum);
+      setFormula(ws, avgRow, 3, `D${totalRow+1}/COUNT(D3:D${days+2})`, {...st.normalBold, font:{bold:true, sz:10, color:{rgb:'00B050'}}, numFmt:'#,##0.0'});
+      setFormula(ws, avgRow, 4, `E${totalRow+1}/COUNT(E3:E${days+2})`, {...st.normalBold, font:{bold:true, sz:10, color:{rgb:'FF0000'}}, numFmt:'#,##0.0'});
+      setCell(ws, avgRow, 5, '', st.normal);
+
+      const noteRow = avgRow + 2;
+      setCell(ws, noteRow, 1, 'อักษรสีน้ำเงิน คือ น้ำหนักของสินค้าที่รับเข้าโกดัง', st.blueText);
+      ws['!merges'].push({s:{r:noteRow,c:1}, e:{r:noteRow,c:5}});
+      setCell(ws, noteRow+1, 1, 'อักษรสีเขียว คือ น้ำหนักของสินค้าที่ส่งออกจากโกดัง', st.greenText);
+      ws['!merges'].push({s:{r:noteRow+1,c:1}, e:{r:noteRow+1,c:5}});
+      setCell(ws, noteRow+2, 1, 'อักษรสีแดง คือ น้ำหนักของสินค้าที่ถูกจัดเก็บในโกดัง', st.redText);
+      ws['!merges'].push({s:{r:noteRow+2,c:1}, e:{r:noteRow+2,c:5}});
+
+      applyRangeStyle(ws, 0, 1, avgRow, 5, st.blank);
+      return ws;
+    }
+
+    async function exportWeeklyInboundExcel(){
+      if(!ensureExcelLibrary()) return;
+      const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const rows = await getRowsForExportYear(year);
+      const wb = XLSX.utils.book_new();
+      for(let month=0; month<12; month++){
+        const monthRows = rows.filter(row => Number(String(row.date).slice(5,7)) === month + 1);
+        const ws = createWeeklySheet(year, month, monthRows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`Inbound ${MONTH_SHORT_EN[month]} ${year}`));
+      }
+      downloadWorkbook(wb, `Weekly Inbound ${year}.xlsx`);
+    }
+
+    async function exportBalanceInboundExcel(){
+      if(!ensureExcelLibrary()) return;
+      const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const rows = await getRowsForExportYear(year);
+      const wb = XLSX.utils.book_new();
+      for(let month=0; month<12; month++){
+        const monthRows = rows.filter(row => Number(String(row.date).slice(5,7)) === month + 1);
+        const ws = createBalanceSheet(year, month, monthRows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`Balance product ${year} ${MONTH_SHORT_EN[month]}`));
+      }
+      downloadWorkbook(wb, `Balance Inbound ${year}.xlsx`);
+    }
+
+    function parseCSVLine(line){
+      const out = [];
+      let cur = "", quote = false;
+      for(let i=0;i<line.length;i++){
+        const ch = line[i];
+        if(ch === '"' && line[i+1] === '"'){ cur += '"'; i++; continue; }
+        if(ch === '"'){ quote = !quote; continue; }
+        if(ch === "," && !quote){ out.push(cur); cur=""; continue; }
+        cur += ch;
+      }
+      out.push(cur);
+      return out.map(x => x.trim());
+    }
+
+    function cleanNumberText(v){
+      const s = String(v ?? "").replace(/,/g, "").trim();
+      if(s === "" || s === "-") return "";
+      const n = Number(s);
+      return Number.isFinite(n) ? n : s;
+    }
+
+    function normalizeInventoryLocationText(value){
+      const raw = String(value ?? '').trim();
+      if(!raw) return '';
+      const text = raw.replace(/^location\s*/i, '').trim();
+      return normalizeLocationPlace(text);
+    }
+
+    function splitBatchTankText(value){
+      const text = String(value ?? '').trim();
+      if(!text) return { batchNo:'', tankCode:'' };
+      const parts = text.split(/[_/]/).map(x => x.trim()).filter(Boolean);
+      if(parts.length >= 2) return { batchNo:parts[0], tankCode:parts.slice(1).join('_') };
+      const m = text.match(/^([A-Z]\d{8})\s+([A-Z]{1,3}\d{4,}[A-Z0-9]*)$/i);
+      if(m) return { batchNo:m[1], tankCode:m[2] };
+      return { batchNo:text, tankCode:'' };
+    }
+
+    function parseQtyAllocateText(value){
+      const entries = [];
+      const text = String(value || '').trim();
+      const re = /(\d+)\s*\(\s*([\d,.]+)\s*\)/g;
+      let match;
+      while((match = re.exec(text))){
+        const round = String(match[1]).trim();
+        const qty = cleanNumberText(match[2]);
+        if(round && num(qty) > 0) entries.push({ round, qty });
+      }
+      return entries;
+    }
+
+    function extractBookingFromCells(cells, currentBooking=''){
+      const cloned = [...cells];
+      const first = String(cloned[0] || '').trim();
+      const m = first.match(/^([A-Z0-9][A-Z0-9_-]{5,})\s*[:：]\s*(.*)$/i);
+      if(!m) return { cells:cloned, bookingNo:currentBooking };
+      cloned[0] = m[2].trim();
+      return { cells:cloned, bookingNo:m[1].trim().toUpperCase() };
+    }
+
+    function normalizeParsedRows(parsed){
+      if(!parsed) return [];
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [parsed];
+    }
+
+    function rowFromInventoryCells(cols, carryTripNo="", bookingNo=""){
+      if(cols.length < 6) return null;
+      const location = normalizeInventoryLocationText(cols[0]);
+      const firstIsLocation = /^location\b/i.test(String(cols[0] || '')) || !!parseLocationCodeInfo(location) || /^โกดัง|^ส่งออก/i.test(String(cols[0] || '').trim());
+      if(!firstIsLocation) return null;
+      const productName = String(cols[1] ?? '').trim();
+      const qty = cleanNumberText(cols[2]);
+      if(!productName || qty === '' || /^item\s*number$/i.test(productName) || !num(qty)) return null;
+      const allocateText = String(cols[3] ?? '').trim();
+      const allocations = parseQtyAllocateText(allocateText);
+      const uom = String(cols[4] ?? '').trim();
+      const batchCell = String(cols[6] ?? cols[5] ?? '').trim();
+      const inventoryStatus = String(cols[5] ?? '').trim();
+      const { batchNo, tankCode } = splitBatchTankText(batchCell);
+      const qtyNumber = num(qty);
+      const packType = /JB|850/i.test(uom) ? 'JB' : (/PP|25/i.test(uom) ? 'PP' : '');
+      const factor = packType === 'JB' ? 850 : (packType === 'PP' ? 25 : 0);
+      const baseRemarkParts = [
+        bookingNo ? `Booking: ${bookingNo}` : '',
+        inventoryStatus && inventoryStatus !== batchCell ? inventoryStatus : ''
+      ].filter(Boolean);
+
+      const makeRow = (usedQty, round='') => {
+        const usedNumber = num(usedQty);
+        return {
+          tripNo: round || carryTripNo || '',
+          productName,
+          batchNo,
+          tankCode: normalizedTank(tankCode),
+          bags: usedQty,
+          kg: factor && usedNumber ? usedNumber * factor : '',
+          pallets:'',
+          packType,
+          remark:[...baseRemarkParts, round ? `Allocate: ${round}(${usedQty})` : (allocateText ? `Allocate: ${allocateText}` : ''), `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / ') || 'ส่งออก',
+          location,
+          bookingNo,
+          allocateText,
+          exportRound: round,
+          sourceQty: qty
+        };
+      };
+
+      // สำหรับหน้าส่งออก: Qty Allocate คือจำนวนที่ใช้จริง และเลขหน้าวงเล็บคือลำดับคันส่งออก
+      if(allocations.length){
+        return allocations.map(item => makeRow(item.qty, item.round));
+      }
+      return makeRow(qty, carryTripNo || '');
+    }
+
+    function rowFromCells(cells, carryTripNo="", bookingNo=""){
+      let cols = cells.map(x => String(x ?? "").trim()).filter((x,i) => x || i === 0);
+      if(!cols.length) return null;
+      const inventoryRow = rowFromInventoryCells(cols, carryTripNo, bookingNo);
+      if(inventoryRow) return inventoryRow;
+      if(cols[0] === "-" || /^remark$/i.test(cols[0])) return null;
+      if(/^date$/i.test(cols[0]) || /^no\.?$/i.test(cols[0])) return null;
+
+      let tripNo = carryTripNo;
+      if(/^\d+$/.test(cols[0])){
+        tripNo = cols.shift();
+      }else if(/^[-–—]$/.test(cols[0])){
+        cols.shift();
+        if(/^\d+$/.test(cols[0])) tripNo = cols.shift();
+      }
+
+      if(cols.length < 7) return null;
+      return {
+        tripNo,
+        productName: cols[0] ?? "",
+        batchNo: cols[1] ?? "",
+        tankCode: cols[2] ?? "",
+        bags: cleanNumberText(cols[3]),
+        kg: cleanNumberText(cols[4]),
+        pallets: cleanNumberText(cols[5]),
+        packType: calcPackType(cleanNumberText(cols[3]), cleanNumberText(cols[4])),
+        remark: [bookingNo ? `Booking: ${bookingNo}` : '', (cols.slice(6).join(" ") || "Plastic pallet (60)").replace(/\s+-\s*$/, "").trim()].filter(Boolean).join(' / '),
+        location: "",
+        bookingNo
+      };
+    }
+
+    function parseTransportText(text){
+      const raw = String(text ?? "").replace(/\u00a0/g, " ").trim();
+      if(!raw) return [];
+      const rows = [];
+      let carryTripNo = "";
+      let currentBookingNo = "";
+
+      // แบบคัดลอกจาก Excel / Google Sheets จะคั่นคอลัมน์ด้วย Tab และขึ้นบรรทัดใหม่เป็นรายแถว
+      const lines = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      const hasTabRows = lines.some(line => line.includes("\t"));
+      if(hasTabRows){
+        for(const line of lines){
+          let cells = line.split(/	+/).map(x => x.trim());
+          const extracted = extractBookingFromCells(cells, currentBookingNo);
+          cells = extracted.cells;
+          currentBookingNo = extracted.bookingNo || currentBookingNo;
+          const parsedRows = normalizeParsedRows(rowFromCells(cells, carryTripNo, currentBookingNo));
+          for(const row of parsedRows){
+            carryTripNo = row.tripNo || carryTripNo;
+            if(!row.tripNo) row.tripNo = carryTripNo;
+            if(currentBookingNo && !row.bookingNo) row.bookingNo = currentBookingNo;
+            rows.push(row);
+          }
+        }
+        if(rows.length) return rows;
+      }
+
+      // CSV ปกติ: ใช้ได้เมื่อไม่มี comma เป็นตัวคั่นหลักพันในตัวเลข หรือมี quote ครอบไว้
+      if(lines.some(line => line.includes(",") && !/\d,\d{3}/.test(line))){
+        for(const line of lines){
+          let cells = parseCSVLine(line);
+          const extracted = extractBookingFromCells(cells, currentBookingNo);
+          cells = extracted.cells;
+          currentBookingNo = extracted.bookingNo || currentBookingNo;
+          const parsedRows = normalizeParsedRows(rowFromCells(cells, carryTripNo, currentBookingNo));
+          for(const row of parsedRows){
+            carryTripNo = row.tripNo || carryTripNo;
+            if(!row.tripNo) row.tripNo = carryTripNo;
+            if(currentBookingNo && !row.bookingNo) row.bookingNo = currentBookingNo;
+            rows.push(row);
+          }
+        }
+        if(rows.length) return rows;
+      }
+
+      // แบบข้อความยาวต่อกัน: จับจากรูปแบบ Product + Batch + Tank + จำนวน + Remark
+      const flat = raw
+        .replace(/[\t\r\n]+/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/\bDate\b|\bNo\.?\b|Product name|Batch No\.?|Tank code|Quantity \(bag\)|Quantity \(Kg\)|Quantity \(pallet\)|Remark/gi, " ")
+        .trim();
+      const pattern = /(?:^|\s)([-–—]?\s*)?(?:(\d+)\s+)?(.+?)\s+([A-Z]\d{8})\s+([A-Z]\d{6}[A-Z]\d+)\s+([\d,]+)\s+([\d,]+(?:\.\d+)?)\s+(\d+)\s+(.*?)(?=\s+[-–—]?\s*(?:(?:\d+)\s+)?[^\s].+?\s+[A-Z]\d{8}\s+[A-Z]\d{6}[A-Z]\d+\s+[\d,]+\s+[\d,]+(?:\.\d+)?\s+\d+\s+|$)/g;
+      let match;
+      while((match = pattern.exec(flat))){
+        const [, dash, no, productName, batchNo, tankCode, bags, kg, pallets, remarkRaw] = match;
+        if(no) carryTripNo = no;
+        const remark = String(remarkRaw || "").replace(/\s+-\s*$/, "").trim();
+        rows.push({
+          tripNo: no || carryTripNo,
+          productName: productName.replace(/^[-–—]\s*/, "").trim(),
+          batchNo,
+          tankCode,
+          bags: cleanNumberText(bags),
+          kg: cleanNumberText(kg),
+          pallets: cleanNumberText(pallets),
+          packType: calcPackType(cleanNumberText(bags), cleanNumberText(kg)),
+          remark: remark || "Plastic pallet (60)",
+          location: ""
+        });
+      }
+      return rows;
+    }
+
+    async function importCSV(text){
+      const rows = parseTransportText(text);
+      if(!rows.length){
+        alert("อ่านข้อมูลนำเข้าไม่ได้ กรุณาวางจาก Excel แบบคั่นด้วย Tab หรือเรียงเป็น No, Product, Batch, Tank, Bag, Kg, Pallet, Remark หรือแบบ Location, Item Number, Qty, UOM, Batch");
+        return;
+      }
+      for(const row of rows){
+        await addRow(row);
+      }
+      await Promise.all(Array.from(new Set(rows.map(r => String(r.productName || '').trim()).filter(Boolean))).map(saveProductOption));
+    }
+
+    async function copyYesterday(){
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - 1);
+      const y = d.toISOString().slice(0,10);
+      const oldRows = await new Promise(resolve => {
+        onValue(dateRef(y), snap => {
+          const raw = snap.val() || {};
+          resolve(Object.values(raw));
+        }, { onlyOnce:true });
+      });
+      if(!oldRows.length){
+        alert("ไม่พบข้อมูลของวันก่อนหน้า");
+        return;
+      }
+      if(!confirm(`ต้องการคัดลอกข้อมูลจาก ${y} มาไว้วันที่ ${currentDate} ใช่ไหม?`)) return;
+      for(const row of oldRows){
+        const { createdAt, updatedAt, dateText, ...data } = row;
+        await addRow({ ...data, dateText: formatDateThaiLike(currentDate) });
+      }
+    }
+
+    tbody.addEventListener("input", (e) => {
+      const el = e.target.closest("input, textarea, select");
+      if(el?.dataset?.id) markUnsaved(el);
+    });
+
+    tbody.addEventListener("change", (e) => {
+      const el = e.target.closest("select");
+      if(el?.dataset?.id){
+        markUnsaved(el);
+        commitSave(el, false);
+      }
+    });
+
+    tbody.addEventListener("keydown", (e) => {
+      const el = e.target.closest("input, textarea, select");
+      if(!el?.dataset?.id || e.isComposing) return;
+      if(e.key === "Enter"){
+        // ช่อง Remark เป็น textarea: กด Enter = บันทึก, กด Shift+Enter = ขึ้นบรรทัดใหม่
+        if(el.tagName === "TEXTAREA" && e.shiftKey) return;
+        e.preventDefault();
+        commitSave(el, true);
+      }
+      if(e.key === "Escape" && el.classList.contains("dirty")){
+        e.preventDefault();
+        discardUnsaved(el);
+      }
+    });
+
+    tbody.addEventListener("focusout", (e) => {
+      const el = e.target.closest("input, textarea, select");
+      if(!el?.dataset?.id || !el.classList.contains("dirty")) return;
+      // Tab หรือคลิกออกจากช่อง = ถือว่าพิมพ์เสร็จแล้ว ให้บันทึกและซิงก์
+      setTimeout(() => {
+        if(el.classList.contains("dirty")) commitSave(el, false);
+      }, 120);
+    });
+
+    tbody.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if(!btn) return;
+      if(btn.dataset.action === "insert-item") insertItemAfter(btn.dataset.id);
+      if(btn.dataset.action === "insert-trip") insertTripAfter(btn.dataset.id);
+      if(btn.dataset.action === "trip-status") setTripStatus(btn.dataset.id, btn.dataset.status);
+      if(btn.dataset.action === "trip-rollover") rolloverTripToNextWorkingDay(btn.dataset.id);
+      if(btn.dataset.action === "dup") duplicateRow(btn.dataset.id);
+      if(btn.dataset.action === "del") deleteRow(btn.dataset.id);
+    });
+
+
+    todoAddBtn.addEventListener("click", addTodo);
+    todoTextInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        addTodo();
+      }
+    });
+    todoToggleBtn.addEventListener("click", () => {
+      todoWidget.classList.toggle("collapsed");
+      const collapsed = todoWidget.classList.contains("collapsed");
+      todoToggleBtn.textContent = collapsed ? "ขยาย" : "ย่อ";
+      localStorage.setItem("knsTransportTodoCollapsed", collapsed ? "1" : "0");
+    });
+    todoLists.addEventListener("click", (e) => {
+      const actionEl = e.target.closest("[data-todo-action]");
+      const row = e.target.closest("[data-todo-id]");
+      if(!actionEl || !row) return;
+      const id = row.dataset.todoId;
+      const item = todoItems.find(x => x.id === id);
+      if(!item) return;
+      const action = actionEl.dataset.todoAction;
+      if(action === "toggle") toggleTodoDone(id, actionEl.checked);
+      if(action === "edit") editTodo(id);
+      if(action === "delete") deleteTodo(id);
+    });
+
+    emptyLocationToggleBtn.addEventListener("click", () => {
+      emptyLocationsWidget.classList.toggle("collapsed");
+      const collapsed = emptyLocationsWidget.classList.contains("collapsed");
+      emptyLocationToggleBtn.textContent = collapsed ? "ขยาย" : "ย่อ";
+      localStorage.setItem("knsTransportEmptyLocationsCollapsed", collapsed ? "1" : "0");
+    });
+    emptyLocationCopyBtn.addEventListener("click", copyEmptyLocations);
+    emptyLocationManualAddBtn.addEventListener("click", addManualEmptyLocations);
+    emptyLocationManualInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        addManualEmptyLocations();
+      }
+    });
+    emptyLocationLists.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-empty-action='delete-manual']");
+      if(!btn) return;
+      deleteManualEmptyLocation(btn.dataset.id);
+    });
+
+    $("addRowBtn").addEventListener("click", () => addRow());
+    $("exportBtn").addEventListener("click", () => {
+      if(!rowsCache.length){
+        alert("ยังไม่มีข้อมูลสำหรับส่งออก");
+        return;
+      }
+      downloadText(`KNS-${currentPage}-${currentDate}-ตามแบบ.csv`, toCSV(rowsCache));
+    });
+    $("exportPlanExcelBtn").addEventListener("click", exportPlanExcelLikeImage);
+    $("exportWeeklyExcelBtn").addEventListener("click", exportWeeklyInboundExcel);
+    $("exportBalanceExcelBtn").addEventListener("click", exportBalanceInboundExcel);
+    $("copyYesterdayBtn").addEventListener("click", copyYesterday);
+
+    pageTabs.forEach(btn => {
+      btn.addEventListener("click", () => {
+        currentPage = btn.dataset.page;
+        localStorage.setItem("knsTransportPage", currentPage);
+        listenDate(dateInput.value);
+      });
+    });
+
+    $("importBtn").addEventListener("click", () => $("importDialog").showModal());
+    $("cancelImportBtn").addEventListener("click", () => $("importDialog").close());
+    $("confirmImportBtn").addEventListener("click", async () => {
+      await importCSV($("csvInput").value);
+      $("csvInput").value = "";
+      $("importDialog").close();
+    });
+
+    dateInput.addEventListener("change", () => {
+      if(dateInput.value) listenDate(dateInput.value);
+    });
+
+    if(localStorage.getItem("knsTransportTodoCollapsed") === "1"){
+      todoWidget.classList.add("collapsed");
+      todoToggleBtn.textContent = "ขยาย";
+    }
+    if(localStorage.getItem("knsTransportEmptyLocationsCollapsed") === "1"){
+      emptyLocationsWidget.classList.add("collapsed");
+      emptyLocationToggleBtn.textContent = "ขยาย";
+    }
+
+    dateInput.value = todayLocal();
+    applyPageUI();
+    listenConnection();
+    listenDate(dateInput.value);
+  </script>
+</body>
+</html>
