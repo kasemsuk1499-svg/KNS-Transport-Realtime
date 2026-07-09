@@ -3758,9 +3758,11 @@
     }
 
     function weeklyOutboundLoadRemark(type, qty){
+      // JB ให้ฟิก Remark เป็นข้อความมาตรฐานเสมอ ไม่อิงจำนวนถุงที่คำนวณได้
+      if(type === 'JB') return 'โหลดทั้งพาเลท ตู้ละ 20 ถุง';
       const q = formatWeeklyQty(qty);
       if(!q) return '';
-      return type === 'JB' ? `โหลดทั้งพาเลท ตู้ละ ${q} ถุง` : `โหลดเรียงพื้น ตู้ละ ${q} ถุง`;
+      return `โหลดเรียงพื้น ตู้ละ ${q} ถุง`;
     }
 
     function weeklyQtyPerContainerFromMT(quantityMT, type, fcl){
@@ -4045,7 +4047,9 @@
         // หน้าเว็บ 1 แถว = งานที่โหลดแล้ว 1 ตู้ แต่กันกรณีสินค้าเดียวกันแยกหลาย Location ในตู้เดียวกัน
         if(seenContainers.has(uniqueKey)) continue;
         seenContainers.add(uniqueKey);
-        const cleanRemark = String(row.remark || row.bookingRemark || '').split('/').map(x => x.trim()).find(x => /โหลด.*ตู้ละ.*ถุง/.test(x)) || weeklyOutboundLoadRemark(type, loadedQty);
+        const cleanRemark = type === 'JB'
+          ? weeklyOutboundLoadRemark(type, loadedQty)
+          : (String(row.remark || row.bookingRemark || '').split('/').map(x => x.trim()).find(x => /โหลด.*ตู้ละ.*ถุง/.test(x)) || weeklyOutboundLoadRemark(type, loadedQty));
         records.push({
           date:row.date,
           productName,
@@ -4118,7 +4122,7 @@
           ...item,
           qty,
           source:hasWeb ? 'WEB' : 'FILE',
-          remark:Array.from(remarkSet)[0] || fallbackRemark
+          remark:item.type === 'JB' ? fallbackRemark : (Array.from(remarkSet)[0] || fallbackRemark)
         };
       }).filter(item => item.qty > 0).sort((a,b) => {
         const dateDiff = String(a.date).localeCompare(String(b.date));
@@ -4555,7 +4559,7 @@
           kg:usedNumber * factor,
           pallets:'',
           packType,
-          remark:meta.loadRemark || [meta.etdText, `Allocate: ${item.round}(${item.qty})`, `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / '),
+          remark:packType === 'JB' ? weeklyOutboundLoadRemark(packType, item.qty) : (meta.loadRemark || [meta.etdText, `Allocate: ${item.round}(${item.qty})`, `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / ')),
           location,
           bookingNo:meta.bookingNo || '',
           fclCount:meta.fclCount || '',
