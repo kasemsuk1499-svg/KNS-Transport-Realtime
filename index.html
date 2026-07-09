@@ -938,7 +938,23 @@
     body[data-page="OUT"] .table-wrap table{
       min-width:1680px;
     }
-    body:not([data-page="OUT"]) #exportWeeklyOutboundBtn{display:none}
+    body:not([data-page="OUT"]) #exportWeeklyOutboundBtn,
+    body:not([data-page="OUT"]) #setWeeklyOutboundStpBtn,
+    body:not([data-page="OUT"]) #setWeeklyOutboundPtrBtn,
+    body:not([data-page="OUT"]) #weeklyOutboundPlanStatus{display:none}
+    .weekly-outbound-status{
+      display:inline-flex;
+      align-items:center;
+      max-width:320px;
+      min-height:34px;
+      padding:6px 9px;
+      border:1px solid #fed7aa;
+      border-radius:10px;
+      background:#fff7ed;
+      color:#7c2d12;
+      font-weight:700;
+      white-space:normal;
+    }
     body[data-page="OUT"] tr.group-start td{border-top:4px solid #9a3412}
     body[data-page="OUT"] tr.group-end td{border-bottom:4px solid #9a3412}
 
@@ -978,8 +994,12 @@
         <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
         <button id="exportPlanExcelBtn" class="light">ส่งออก Excel ตามสีหน้าเว็บ</button>
         <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
+        <button id="setWeeklyOutboundStpBtn" class="light" type="button">ตั้งไฟล์ STP เดือนนี้</button>
+        <input id="weeklyOutboundStpInput" type="file" accept=".xlsx,.xls,.csv,text/csv" style="display:none" />
+        <button id="setWeeklyOutboundPtrBtn" class="light" type="button">ตั้งไฟล์ PTR เดือนนี้</button>
+        <input id="weeklyOutboundPtrInput" type="file" accept=".xlsx,.xls,.csv,text/csv" style="display:none" />
         <button id="exportWeeklyOutboundBtn" class="light" type="button">Export Weekly Outbound</button>
-        <input id="weeklyOutboundPlanInput" type="file" accept=".csv,text/csv" multiple style="display:none" />
+        <span id="weeklyOutboundPlanStatus" class="hint weekly-outbound-status"></span>
         <button id="exportBalanceExcelBtn" class="light">Export Excel Balance</button>
       </div>
     </div>
@@ -1164,7 +1184,9 @@
     const totalBagsLabel = $("totalBagsLabel");
     const totalKgLabel = $("totalKgLabel");
     const totalPalletsLabel = $("totalPalletsLabel");
-    const weeklyOutboundPlanInput = $("weeklyOutboundPlanInput");
+    const weeklyOutboundStpInput = $("weeklyOutboundStpInput");
+    const weeklyOutboundPtrInput = $("weeklyOutboundPtrInput");
+    const weeklyOutboundPlanStatus = $("weeklyOutboundPlanStatus");
 
     let currentDate = "";
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
@@ -2013,6 +2035,7 @@
       renderTableHeader();
       applyStatLabels();
       document.title = `KNS ${PAGE_LABELS[currentPage] || currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
+      refreshWeeklyOutboundPlanStatus();
     }
 
     function rowOrderValue(row, fallbackIndex=0){
@@ -3610,7 +3633,8 @@
 
     function normalizeWeeklyOutboundProductKey(value){
       let text = normalizeOutboundProductDisplay(value).toUpperCase();
-      text = text.replace(/\((?:PTR|STP|KNS)[^)]*\)/gi, ' ');
+      // รวมชื่อแป้งที่เติมคำท้ายแบบ PTR/STP/KNS หรือคำในวงเล็บ ให้เป็นหัวเดียว เช่น VA-200 PTR = VA-200
+      text = text.replace(/\((?:PTR|STP|KNS|850\s*KG|850KG|TOKAI|SHIMIZU)[^)]*\)/gi, ' ');
       text = text.replace(/\b(?:PTR|STP|KNS)\b.*$/gi, ' ');
       text = text.replace(/\s*\/\s*/g, '/');
       text = text.replace(/\s+-\s+/g, '-');
@@ -3726,41 +3750,123 @@
       return null;
     }
 
-    function parseWeeklyOutboundPlanCSV(text, fileName=''){
-      const objects = csvObjectsFromText(text);
+    function formatWeeklyQty(value){
+      const n = Number(value || 0);
+      if(!Number.isFinite(n)) return '';
+      if(Math.abs(n - Math.round(n)) < 0.0001) return String(Math.round(n));
+      return n.toLocaleString('en-US', { maximumFractionDigits:2 });
+    }
+
+    function weeklyOutboundLoadRemark(type, qty){
+      const q = formatWeeklyQty(qty);
+      if(!q) return '';
+      return type === 'JB' ? `โหลดทั้งพาเลท ตู้ละ ${q} ถุง` : `โหลดเรียงพื้น ตู้ละ ${q} ถุง`;
+    }
+
+    function weeklyQtyPerContainerFromMT(quantityMT, type, fcl){
+      const mt = num(quantityMT);
+      const containerCount = num(fcl);
+      const factor = type === 'JB' ? 850 : (type === 'PP' ? 25 : 0);
+      if(!mt || !containerCount || !factor) return 0;
+      return (mt * 1000) / factor / containerCount;
+    }
+
+    function parseWeeklyOutboundPlanObjects(objects, fileName='', side=''){
       const records = [];
-      for(const obj of objects){
+      for(const obj of objects || []){
         const loadText = getCSVField(obj, ['Load']);
+        // ถ้า Load เป็น STP อย่างเดียวให้ตัดออก แต่ถ้ามี KNS อยู่ด้วยให้ใช้ส่วน KNS
         if(!/KNS/i.test(String(loadText || ''))) continue;
+
         const productRaw = getCSVField(obj, ['Product']);
         const productName = normalizeOutboundProductDisplay(productRaw);
         if(!productName) continue;
+
         const dateLoadText = getCSVField(obj, ['Date Load at factory (R1)', 'Date Load at factory']);
         const dateFcls = parseDateFclItems(dateLoadText);
         if(!dateFcls.length) continue;
+
         const type = outboundTypeFromPacking(getCSVField(obj, ['Packing Type']));
+        if(!type) continue;
+
+        const quantityMT = getCSVField(obj, ['Quantity (MT)', 'Quantity MT', 'Qty (MT)']);
         const booking = String(getCSVField(obj, ['Booking'])).trim();
         const etd = String(getCSVField(obj, ['ETD'])).replace(/\s+/g, ' ').trim();
-        const topic = String(getCSVField(obj, ['ชื่อเรื่อง'])).trim();
+        const topic = String(getCSVField(obj, ['ชื่อเรื่อง', 'Subject'])).trim();
         const knsOverride = knsFclOverrideFromLoadText(loadText);
+
         for(const item of dateFcls){
+          const fcl = knsOverride || item.fcl;
+          const qtyPerContainer = weeklyQtyPerContainerFromMT(quantityMT, type, fcl);
+          if(!qtyPerContainer) continue;
           records.push({
             date:item.date,
             productName,
             refName:productName,
             type,
-            qty:knsOverride || item.fcl,
+            qty:qtyPerContainer,
+            fclCount:fcl,
             booking,
-            source:'CSV',
-            remark:[booking ? `Booking: ${booking}` : '', etd, topic, fileName ? `จากไฟล์: ${fileName}` : ''].filter(Boolean).join(' / ')
+            source:'FILE',
+            side,
+            sourceFile:fileName,
+            remark:weeklyOutboundLoadRemark(type, qtyPerContainer),
+            detailRemark:[booking ? `Booking: ${booking}` : '', etd, topic, side ? side : '', fileName ? `จากไฟล์: ${fileName}` : ''].filter(Boolean).join(' / ')
           });
         }
       }
       return records;
     }
 
-    async function readTextFileUTF8(file){
-      const buffer = await file.arrayBuffer();
+    function parseWeeklyOutboundPlanCSV(text, fileName='', side=''){
+      return parseWeeklyOutboundPlanObjects(csvObjectsFromText(text), fileName, side);
+    }
+
+    function sheetObjectsFromAoa(aoa){
+      const headerIndex = (aoa || []).findIndex(row => {
+        const normalized = (row || []).map(normalizeCSVHeader);
+        return normalized.includes('product')
+          && normalized.some(h => h.includes('quantity') && h.includes('mt'))
+          && normalized.some(h => h.includes('date load at factory'))
+          && normalized.includes('load');
+      });
+      if(headerIndex < 0) return [];
+      const header = (aoa[headerIndex] || []).map(normalizeCSVHeader);
+      return (aoa || []).slice(headerIndex + 1).map(row => {
+        const obj = {};
+        header.forEach((h, i) => { if(h) obj[h] = row[i] ?? ''; });
+        return obj;
+      }).filter(obj => Object.values(obj).some(v => String(v ?? '').trim() !== ''));
+    }
+
+    function parseWeeklyOutboundPlanWorkbook(workbook, fileName='', side=''){
+      const records = [];
+      for(const sheetName of workbook.SheetNames || []){
+        const ws = workbook.Sheets[sheetName];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
+        const objects = sheetObjectsFromAoa(aoa);
+        records.push(...parseWeeklyOutboundPlanObjects(objects, fileName || sheetName, side));
+      }
+      return records;
+    }
+
+    async function fileEntryArrayBuffer(fileOrEntry){
+      if(!fileOrEntry) return null;
+      if(typeof fileOrEntry.arrayBuffer === 'function') return await fileOrEntry.arrayBuffer();
+      if(fileOrEntry.data instanceof ArrayBuffer) return fileOrEntry.data;
+      if(fileOrEntry.data?.buffer instanceof ArrayBuffer) return fileOrEntry.data.buffer;
+      return null;
+    }
+
+    function fileEntryName(fileOrEntry){
+      return fileOrEntry?.name || fileOrEntry?.fileName || 'Plan Load';
+    }
+
+    function fileEntrySide(fileOrEntry){
+      return fileOrEntry?.side || '';
+    }
+
+    function decodeUTF8(buffer){
       return new TextDecoder('utf-8').decode(buffer);
     }
 
@@ -3768,14 +3874,139 @@
       const records = [];
       for(const file of Array.from(files || [])){
         try{
-          const text = await readTextFileUTF8(file);
-          records.push(...parseWeeklyOutboundPlanCSV(text, file.name || 'Plan CSV'));
+          const buffer = await fileEntryArrayBuffer(file);
+          if(!buffer) continue;
+          const name = fileEntryName(file);
+          const side = fileEntrySide(file);
+          if(/\.csv$/i.test(name) || /^text\/csv/i.test(file?.type || '')){
+            records.push(...parseWeeklyOutboundPlanCSV(decodeUTF8(buffer), name, side));
+          }else{
+            const workbook = XLSX.read(buffer, { type:'array' });
+            records.push(...parseWeeklyOutboundPlanWorkbook(workbook, name, side));
+          }
         }catch(err){
           console.error(err);
-          alert(`อ่านไฟล์ ${file?.name || ''} ไม่สำเร็จ`);
+          alert(`อ่านไฟล์ ${fileEntryName(file)} ไม่สำเร็จ`);
         }
       }
       return records;
+    }
+
+    function weeklyOutboundPlanMonthKey(date=currentDate){
+      const base = date || todayLocal();
+      return String(base).slice(0,7);
+    }
+
+    function arrayBufferToBase64(buffer){
+      const bytes = new Uint8Array(buffer || new ArrayBuffer(0));
+      let binary = '';
+      const chunkSize = 0x8000;
+      for(let i = 0; i < bytes.length; i += chunkSize){
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+      }
+      return btoa(binary);
+    }
+
+    function base64ToArrayBuffer(base64){
+      const binary = atob(String(base64 || ''));
+      const bytes = new Uint8Array(binary.length);
+      for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    function weeklyOutboundPlanFileRef(side, monthKey=weeklyOutboundPlanMonthKey()){
+      return ref(db, `knsTransport/weeklyOutboundPlans/${monthKey}/${side}`);
+    }
+
+    async function saveWeeklyOutboundPlanFile(side, file){
+      if(!file) return;
+      const monthKey = weeklyOutboundPlanMonthKey();
+      const buffer = await file.arrayBuffer();
+      await set(weeklyOutboundPlanFileRef(side, monthKey), {
+        monthKey,
+        side,
+        name:file.name || `${side} Plan Load`,
+        type:file.type || '',
+        size:file.size || buffer.byteLength || 0,
+        lastModified:file.lastModified || Date.now(),
+        savedAt:Date.now(),
+        updatedAt:serverTimestamp(),
+        dataBase64:arrayBufferToBase64(buffer)
+      });
+      await refreshWeeklyOutboundPlanStatus();
+      alert(`ตั้งไฟล์ ${side} สำหรับเดือน ${monthKey} เรียบร้อยแล้ว\n${file.name || ''}`);
+    }
+
+    async function getStoredWeeklyOutboundPlanFile(side, monthKey=weeklyOutboundPlanMonthKey()){
+      try{
+        const snap = await get(weeklyOutboundPlanFileRef(side, monthKey));
+        const raw = snap.val();
+        if(!raw?.dataBase64) return null;
+        return {
+          ...raw,
+          side,
+          fileName:raw.name || `${side} Plan Load`,
+          data:base64ToArrayBuffer(raw.dataBase64)
+        };
+      }catch(err){
+        console.error(err);
+        return null;
+      }
+    }
+
+    async function getStoredWeeklyOutboundPlanFiles(monthKey=weeklyOutboundPlanMonthKey()){
+      const stp = await getStoredWeeklyOutboundPlanFile('STP', monthKey);
+      const ptr = await getStoredWeeklyOutboundPlanFile('PTR', monthKey);
+      return [stp, ptr].filter(Boolean);
+    }
+
+    function normalizeStoredWeeklyOutboundFile(raw, side){
+      if(!raw?.dataBase64) return null;
+      return {
+        ...raw,
+        side:side || raw.side || '',
+        fileName:raw.name || `${side || raw.side || 'PLAN'} Plan Load`,
+        data:base64ToArrayBuffer(raw.dataBase64)
+      };
+    }
+
+    async function getStoredWeeklyOutboundPlanFilesForYear(year){
+      try{
+        const snap = await get(ref(db, 'knsTransport/weeklyOutboundPlans'));
+        const raw = snap.val() || {};
+        const out = [];
+        for(const [monthKey, monthData] of Object.entries(raw)){
+          if(!String(monthKey).startsWith(`${year}-`)) continue;
+          for(const side of ['STP','PTR']){
+            const file = normalizeStoredWeeklyOutboundFile(monthData?.[side], side);
+            if(file) out.push(file);
+          }
+        }
+        return out;
+      }catch(err){
+        console.error(err);
+        return [];
+      }
+    }
+
+    async function refreshWeeklyOutboundPlanStatus(){
+      if(!weeklyOutboundPlanStatus) return;
+      if(currentPage !== OUTBOUND_PAGE){
+        weeklyOutboundPlanStatus.textContent = '';
+        return;
+      }
+      try{
+        const monthKey = weeklyOutboundPlanMonthKey();
+        const stp = await getStoredWeeklyOutboundPlanFile('STP', monthKey);
+        const ptr = await getStoredWeeklyOutboundPlanFile('PTR', monthKey);
+        const stpText = stp ? `STP: ${stp.name}` : 'STP: ยังไม่ตั้งไฟล์';
+        const ptrText = ptr ? `PTR: ${ptr.name}` : 'PTR: ยังไม่ตั้งไฟล์';
+        weeklyOutboundPlanStatus.textContent = `${monthKey} • ${stpText} • ${ptrText}`;
+      }catch(err){
+        console.error(err);
+        weeklyOutboundPlanStatus.textContent = 'อ่านสถานะไฟล์ Plan ไม่สำเร็จ';
+      }
     }
 
     function rowsFromOutboundSnapshot(raw, year){
@@ -3795,27 +4026,26 @@
     }
 
     function weeklyOutboundWebRecords(webRows){
-      const seen = new Set();
       const records = [];
       for(const row of webRows || []){
         const productName = normalizeOutboundProductDisplay(row.productName || row.itemNumber || '');
         const type = normalizePackType(row.packType) || calcPackType(row.bags, row.kg) || '';
         const productKey = normalizeWeeklyOutboundProductKey(productName);
         if(!row.date || !productKey || !type) continue;
-        const containerNo = String(row.exportRound || row.tripNo || row.allocateText || '').trim();
+        const qty = num(row.bags) || num(row.sourceQty) || 0;
+        if(!qty) continue;
         const booking = String(row.bookingNo || '').trim();
-        const uniqueKey = [row.date, productKey, type, booking, containerNo || row.id || row.sourceQty || row.bags].join('|');
-        if(seen.has(uniqueKey)) continue;
-        seen.add(uniqueKey);
+        const cleanRemark = String(row.remark || row.bookingRemark || '').split('/').map(x => x.trim()).find(x => /โหลด.*ตู้ละ.*ถุง/.test(x)) || weeklyOutboundLoadRemark(type, qty);
         records.push({
           date:row.date,
           productName,
           refName:productName,
           type,
-          qty:1,
+          qty,
           booking,
           source:'WEB',
-          remark:[booking ? `Booking: ${booking}` : '', 'โหลดสำเร็จจากหน้าเว็บส่งออก'].filter(Boolean).join(' / ')
+          remark:cleanRemark,
+          detailRemark:[booking ? `Booking: ${booking}` : '', row.sourceSheet ? `ชีท: ${row.sourceSheet}` : '', row.allocateText ? `Allocate: ${row.allocateText}` : ''].filter(Boolean).join(' / ')
         });
       }
       return records;
@@ -3838,38 +4068,45 @@
             webQty:0,
             planQty:0,
             webRemarks:new Set(),
-            planRemarks:new Set()
+            planRemarks:new Set(),
+            webDetails:new Set(),
+            planDetails:new Set()
           });
         }
         return map.get(key);
       };
 
+      const mergeQty = (oldQty, newQty) => Math.max(num(oldQty), num(newQty));
+
       for(const rec of planRecords || []){
         const item = ensure(rec);
         if(!item) continue;
-        item.planQty += num(rec.qty);
+        item.planQty = mergeQty(item.planQty, rec.qty);
         if(rec.remark) item.planRemarks.add(rec.remark);
+        if(rec.detailRemark) item.planDetails.add(rec.detailRemark);
         if(!item.productName) item.productName = normalizeOutboundProductDisplay(rec.productName);
       }
       for(const rec of webRecords || []){
         const item = ensure(rec);
         if(!item) continue;
-        item.webQty += num(rec.qty) || 1;
+        item.webQty = mergeQty(item.webQty, rec.qty);
         if(rec.remark) item.webRemarks.add(rec.remark);
+        if(rec.detailRemark) item.webDetails.add(rec.detailRemark);
         // ข้อมูลจากหน้าเว็บเป็นงานโหลดสำเร็จ ให้ใช้ชื่อ Item Number ในเว็บเป็นชื่อหลัก
         item.productName = normalizeOutboundProductDisplay(rec.productName) || item.productName;
         item.refName = normalizeOutboundProductDisplay(rec.refName || rec.productName) || item.refName;
       }
 
       return Array.from(map.values()).map(item => {
-        const qty = item.webQty > 0 && item.planQty > 0 ? Math.max(item.webQty, item.planQty) : (item.webQty || item.planQty);
-        const source = item.webQty > 0 && item.planQty > 0 ? 'WEB/CSV' : (item.webQty > 0 ? 'WEB' : 'CSV');
-        const remarks = item.webQty > 0 ? item.webRemarks : item.planRemarks;
+        const hasWeb = item.webQty > 0;
+        const qty = hasWeb ? item.webQty : item.planQty;
+        const remarkSet = hasWeb ? item.webRemarks : item.planRemarks;
+        const fallbackRemark = weeklyOutboundLoadRemark(item.type, qty);
         return {
           ...item,
           qty,
-          source,
-          remark:[source === 'WEB' ? 'จากหน้าเว็บ' : source === 'CSV' ? 'จากไฟล์ Plan Load KNS' : 'จากหน้าเว็บ + ไฟล์ Plan Load KNS', ...Array.from(remarks).slice(0,2)].filter(Boolean).join(' / ')
+          source:hasWeb ? 'WEB' : 'FILE',
+          remark:Array.from(remarkSet)[0] || fallbackRemark
         };
       }).filter(item => item.qty > 0).sort((a,b) => {
         const dateDiff = String(a.date).localeCompare(String(b.date));
@@ -3915,14 +4152,15 @@
       const border = st.border;
       const titleStyle = { font:{bold:true, sz:14}, alignment:center, border };
       const greyHeader = { font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'D9D9D9'}}, border };
-      const qtyHeader = { font:{bold:true, sz:9, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'D9D9D9'}}, border };
       const qtyTop = { font:{bold:true, sz:9, color:{rgb:'FF0000'}}, alignment:{...center, textRotation:90}, fill:{fgColor:{rgb:'D9D9D9'}}, border };
       const actualTop = { font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'92D050'}}, border };
       const body = { font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border };
       const bodyText = { font:{sz:10}, alignment:left, fill:{fgColor:{rgb:'FFF2CC'}}, border };
+      const remarkPP = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:left, fill:{fgColor:{rgb:'FFF2CC'}}, border };
+      const remarkJB = { font:{sz:10, color:{rgb:'0000FF'}}, alignment:left, fill:{fgColor:{rgb:'FFF2CC'}}, border };
       const bodyBold = { font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border };
-      const redQty = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, numFmt:'#,##0', border };
-      const formulaStyle = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, numFmt:'#,##0', border };
+      const redQty = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, numFmt:'#,##0.##', border };
+      const formulaStyle = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, numFmt:'#,##0.##', border };
 
       setCell(ws, 1, 5, 'Date ', greyHeader);
       setCell(ws, 1, 6, dayDateText(extractDate || currentDate || `${year}-${String(monthIndex + 1).padStart(2,'0')}-01`), greyHeader);
@@ -3975,8 +4213,9 @@
             setCell(ws, r, 1, '', bodyBold);
             for(const c of [24,25,26,27]) setCell(ws, r, c, '', formulaStyle);
           }
+          const remarkStyle = item?.type === 'JB' ? remarkJB : (item?.type === 'PP' ? remarkPP : bodyText);
           setCell(ws, r, 2, item?.productName || '', bodyText);
-          setCell(ws, r, 3, item?.remark || '', bodyText);
+          setCell(ws, r, 3, item?.remark || '', remarkStyle);
           setCell(ws, r, 4, item?.refName || item?.productName || '', bodyText);
           setCell(ws, r, 5, item?.type || '', bodyBold);
           setCell(ws, r, 6, item ? num(item.qty) : '', redQty, item ? 'n' : null);
@@ -3992,7 +4231,7 @@
       return ws;
     }
 
-    async function exportWeeklyOutboundExcel(planFiles=[]){
+    async function exportWeeklyOutboundExcel(planFiles=null){
       if(!ensureExcelLibrary()) return;
       if(currentPage !== OUTBOUND_PAGE){
         alert('ปุ่มนี้ใช้สำหรับหน้า “ส่งออก” เท่านั้น กรุณาเปิดหน้า ส่งออก ก่อน');
@@ -4000,13 +4239,14 @@
       }
       const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
       const webRows = await getOutboundRowsForExportYear(year);
-      const planRecords = await parseWeeklyOutboundPlanFiles(planFiles);
+      const storedFiles = planFiles || await getStoredWeeklyOutboundPlanFilesForYear(year);
+      const planRecords = await parseWeeklyOutboundPlanFiles(storedFiles);
       const webRecords = weeklyOutboundWebRecords(webRows);
       const combined = combineWeeklyOutboundRecords(webRecords, planRecords)
         .filter(row => String(row.date).startsWith(`${year}-`));
 
       if(!combined.length){
-        alert('ยังไม่มีข้อมูลสำหรับทำ Weekly Outbound: หน้าเว็บส่งออกยังว่าง และยังไม่ได้แนบไฟล์ Plan Load CSV');
+        alert('ยังไม่มีข้อมูลสำหรับทำ Weekly Outbound: หน้าเว็บส่งออกยังว่าง และยังไม่ได้ตั้งไฟล์ STP/PTR ของเดือนนี้');
         return;
       }
 
@@ -4026,13 +4266,17 @@
         alert('ปุ่ม Export Weekly Outbound ใช้ในหน้า “ส่งออก” เท่านั้นค่ะ');
         return;
       }
-      const useFiles = confirm('ต้องการแนบไฟล์ Plan Load CSV เพื่อดึงงานที่ยังไม่โหลดไหม?\n\nกด OK แล้วเลือกไฟล์ JUL - STP 1/2 Plan load 2026.csv ได้หลายไฟล์\nกด Cancel เพื่อส่งออกจากข้อมูลที่มีในหน้าเว็บส่งออกอย่างเดียว');
-      if(useFiles){
-        weeklyOutboundPlanInput.value = '';
-        weeklyOutboundPlanInput.click();
-      }else{
-        await exportWeeklyOutboundExcel([]);
+      const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const storedFiles = await getStoredWeeklyOutboundPlanFilesForYear(year);
+      if(!storedFiles.length){
+        const ok = confirm('ยังไม่ได้ตั้งไฟล์ STP/PTR สำหรับปีนี้\n\nกด OK เพื่อตั้งไฟล์ STP ของเดือนที่เลือกก่อน หรือ Cancel เพื่อส่งออกจากข้อมูลหน้าเว็บอย่างเดียว');
+        if(ok){
+          weeklyOutboundStpInput.value = '';
+          weeklyOutboundStpInput.click();
+          return;
+        }
       }
+      await exportWeeklyOutboundExcel(storedFiles);
     }
 
     async function exportWeeklyInboundExcel(){
@@ -4220,9 +4464,9 @@
 
     function extractOutboundMetaFromLines(lines){
       const cleanLines = (lines || []).map(x => String(x || '').replace(/ /g, ' ').trim()).filter(Boolean);
-      const fclLine = cleanLines.find(line => /FCL/i.test(line) && /\d{1,2}\/\d{1,2}\/\d{4}/.test(line)) || '';
+      const fclLine = cleanLines.find(line => /\bFCL\b/i.test(line) && /\d{1,2}\/\d{1,2}\/\d{4}/.test(line)) || '';
       const fclMatch = fclLine.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*-\s*(\d+)\s*FCL/i);
-      const etdIndex = cleanLines.findIndex(line => /^ETD/i.test(line));
+      const etdIndex = cleanLines.findIndex(line => /^ETD\b/i.test(line));
       const scanEnd = etdIndex >= 0 ? etdIndex : cleanLines.length;
       let bookingNo = '';
       for(let i = scanEnd - 1; i >= 0; i--){
@@ -4239,12 +4483,14 @@
       }
       const remarkStart = fclLine ? cleanLines.indexOf(fclLine) : -1;
       const remarkLines = remarkStart >= 0 ? cleanLines.slice(remarkStart, Math.min(cleanLines.length, remarkStart + 10)) : cleanLines.slice(Math.max(0, cleanLines.length - 6));
+      const loadRemark = cleanLines.find(line => /โหลด.*ตู้ละ.*ถุง/i.test(line)) || '';
       return {
         bookingNo,
         fclCount:fclMatch ? cleanNumberText(fclMatch[2]) : '',
         bookingDateText:fclMatch ? fclMatch[1] : '',
         etdText:etdIndex >= 0 ? cleanLines[etdIndex] : '',
-        bookingRemark:remarkLines.join(' / ')
+        loadRemark,
+        bookingRemark:[loadRemark, ...remarkLines].filter(Boolean).join(' / ')
       };
     }
 
@@ -4297,7 +4543,7 @@
           kg:usedNumber * factor,
           pallets:'',
           packType,
-          remark:[meta.etdText, `Allocate: ${item.round}(${item.qty})`, `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / '),
+          remark:meta.loadRemark || [meta.etdText, `Allocate: ${item.round}(${item.qty})`, `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / '),
           location,
           bookingNo:meta.bookingNo || '',
           fclCount:meta.fclCount || '',
@@ -4589,9 +4835,16 @@
     $("exportPlanExcelBtn").addEventListener("click", exportPlanExcelLikeImage);
     $("exportWeeklyExcelBtn").addEventListener("click", exportWeeklyInboundExcel);
     $("exportWeeklyOutboundBtn").addEventListener("click", handleWeeklyOutboundExportClick);
-    weeklyOutboundPlanInput.addEventListener("change", async (e) => {
-      const files = Array.from(e.target.files || []);
-      if(files.length) await exportWeeklyOutboundExcel(files);
+    $("setWeeklyOutboundStpBtn").addEventListener("click", () => { weeklyOutboundStpInput.value = ""; weeklyOutboundStpInput.click(); });
+    $("setWeeklyOutboundPtrBtn").addEventListener("click", () => { weeklyOutboundPtrInput.value = ""; weeklyOutboundPtrInput.click(); });
+    weeklyOutboundStpInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if(file) await saveWeeklyOutboundPlanFile('STP', file);
+      e.target.value = "";
+    });
+    weeklyOutboundPtrInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if(file) await saveWeeklyOutboundPlanFile('PTR', file);
       e.target.value = "";
     });
     $("exportBalanceExcelBtn").addEventListener("click", exportBalanceInboundExcel);
