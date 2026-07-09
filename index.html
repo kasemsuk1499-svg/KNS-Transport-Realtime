@@ -938,6 +938,7 @@
     body[data-page="OUT"] .table-wrap table{
       min-width:1680px;
     }
+    body:not([data-page="OUT"]) #exportWeeklyOutboundBtn{display:none}
     body[data-page="OUT"] tr.group-start td{border-top:4px solid #9a3412}
     body[data-page="OUT"] tr.group-end td{border-bottom:4px solid #9a3412}
 
@@ -977,6 +978,8 @@
         <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
         <button id="exportPlanExcelBtn" class="light">ส่งออก Excel ตามสีหน้าเว็บ</button>
         <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
+        <button id="exportWeeklyOutboundBtn" class="light" type="button">Export Weekly Outbound</button>
+        <input id="weeklyOutboundPlanInput" type="file" accept=".csv,text/csv" multiple style="display:none" />
         <button id="exportBalanceExcelBtn" class="light">Export Excel Balance</button>
       </div>
     </div>
@@ -1161,6 +1164,7 @@
     const totalBagsLabel = $("totalBagsLabel");
     const totalKgLabel = $("totalKgLabel");
     const totalPalletsLabel = $("totalPalletsLabel");
+    const weeklyOutboundPlanInput = $("weeklyOutboundPlanInput");
 
     let currentDate = "";
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
@@ -3586,6 +3590,451 @@
       return ws;
     }
 
+
+    function normalizeOutboundProductDisplay(value){
+      const parts = String(value || '')
+        .replace(/\r/g, '\n')
+        .split(/\n+/g)
+        .map(part => part.trim().replace(/\s+/g, ' '))
+        .filter(Boolean);
+      const grouped = [];
+      for(const part of parts){
+        if(/^\([^)]*\)$/.test(part) && grouped.length){
+          grouped[grouped.length - 1] = `${grouped[grouped.length - 1]} ${part}`;
+        }else{
+          grouped.push(part);
+        }
+      }
+      return grouped.join('/').replace(/\s*\/\s*/g, '/').replace(/\s+/g, ' ').trim();
+    }
+
+    function normalizeWeeklyOutboundProductKey(value){
+      let text = normalizeOutboundProductDisplay(value).toUpperCase();
+      text = text.replace(/\((?:PTR|STP|KNS)[^)]*\)/gi, ' ');
+      text = text.replace(/\b(?:PTR|STP|KNS)\b.*$/gi, ' ');
+      text = text.replace(/\s*\/\s*/g, '/');
+      text = text.replace(/\s+-\s+/g, '-');
+      text = text.replace(/\s+/g, ' ').trim();
+      return text;
+    }
+
+    function outboundTypeFromPacking(value){
+      const text = String(value || '').toUpperCase();
+      if(/JUMBO|850/.test(text)) return 'JB';
+      if(/PP|25\s*KG|25KG|SPS|OEM|PAPER|BAG|STICKER|REV/.test(text)) return 'PP';
+      return '';
+    }
+
+    function parseWholeCSV(text){
+      const rows = [];
+      let row = [];
+      let cur = '';
+      let quote = false;
+      const raw = String(text || '').replace(/^\uFEFF/, '');
+      for(let i = 0; i < raw.length; i++){
+        const ch = raw[i];
+        const next = raw[i + 1];
+        if(quote){
+          if(ch === '"' && next === '"'){
+            cur += '"';
+            i++;
+          }else if(ch === '"'){
+            quote = false;
+          }else{
+            cur += ch;
+          }
+          continue;
+        }
+        if(ch === '"') quote = true;
+        else if(ch === ','){
+          row.push(cur);
+          cur = '';
+        }else if(ch === '\n'){
+          row.push(cur);
+          rows.push(row);
+          row = [];
+          cur = '';
+        }else if(ch === '\r'){
+          // ข้าม CR เพราะรองรับ CRLF ด้วย \n อยู่แล้ว
+        }else{
+          cur += ch;
+        }
+      }
+      if(cur !== '' || row.length){
+        row.push(cur);
+        rows.push(row);
+      }
+      return rows.filter(r => r.some(c => String(c || '').trim() !== ''));
+    }
+
+    function normalizeCSVHeader(value){
+      return String(value || '').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function csvObjectsFromText(text){
+      const rows = parseWholeCSV(text);
+      if(!rows.length) return [];
+      const header = rows[0].map(normalizeCSVHeader);
+      return rows.slice(1).map(row => {
+        const obj = {};
+        header.forEach((h, i) => { if(h) obj[h] = row[i] ?? ''; });
+        return obj;
+      });
+    }
+
+    function getCSVField(obj, names){
+      for(const name of names){
+        const key = normalizeCSVHeader(name);
+        if(Object.prototype.hasOwnProperty.call(obj, key)) return obj[key];
+      }
+      return '';
+    }
+
+    function isoFromDMYText(d, m, y){
+      let year = Number(y);
+      if(year < 100) year += 2000;
+      if(year > 2400) year -= 543;
+      const month = Number(m);
+      const day = Number(d);
+      if(!year || !month || !day) return '';
+      return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    }
+
+    function parseDateFclItems(text){
+      const out = [];
+      const re = /(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*[-–—]\s*(\d+(?:\.\d+)?)\s*FCL/gi;
+      let m;
+      while((m = re.exec(String(text || ''))) !== null){
+        const date = isoFromDMYText(m[1], m[2], m[3]);
+        const fcl = num(m[4]);
+        if(date && fcl) out.push({ date, fcl });
+      }
+      return out;
+    }
+
+    function knsFclOverrideFromLoadText(loadText){
+      const text = String(loadText || '').toUpperCase().replace(/\s+/g, ' ');
+      if(!/KNS/.test(text)) return null;
+      const patterns = [
+        /KNS[^0-9]*(\d+(?:\.\d+)?)\s*FCL/i,
+        /(\d+(?:\.\d+)?)\s*FCL[^A-Z0-9]*KNS/i
+      ];
+      for(const pattern of patterns){
+        const m = text.match(pattern);
+        if(m && num(m[1])) return num(m[1]);
+      }
+      return null;
+    }
+
+    function parseWeeklyOutboundPlanCSV(text, fileName=''){
+      const objects = csvObjectsFromText(text);
+      const records = [];
+      for(const obj of objects){
+        const loadText = getCSVField(obj, ['Load']);
+        if(!/KNS/i.test(String(loadText || ''))) continue;
+        const productRaw = getCSVField(obj, ['Product']);
+        const productName = normalizeOutboundProductDisplay(productRaw);
+        if(!productName) continue;
+        const dateLoadText = getCSVField(obj, ['Date Load at factory (R1)', 'Date Load at factory']);
+        const dateFcls = parseDateFclItems(dateLoadText);
+        if(!dateFcls.length) continue;
+        const type = outboundTypeFromPacking(getCSVField(obj, ['Packing Type']));
+        const booking = String(getCSVField(obj, ['Booking'])).trim();
+        const etd = String(getCSVField(obj, ['ETD'])).replace(/\s+/g, ' ').trim();
+        const topic = String(getCSVField(obj, ['ชื่อเรื่อง'])).trim();
+        const knsOverride = knsFclOverrideFromLoadText(loadText);
+        for(const item of dateFcls){
+          records.push({
+            date:item.date,
+            productName,
+            refName:productName,
+            type,
+            qty:knsOverride || item.fcl,
+            booking,
+            source:'CSV',
+            remark:[booking ? `Booking: ${booking}` : '', etd, topic, fileName ? `จากไฟล์: ${fileName}` : ''].filter(Boolean).join(' / ')
+          });
+        }
+      }
+      return records;
+    }
+
+    async function readTextFileUTF8(file){
+      const buffer = await file.arrayBuffer();
+      return new TextDecoder('utf-8').decode(buffer);
+    }
+
+    async function parseWeeklyOutboundPlanFiles(files){
+      const records = [];
+      for(const file of Array.from(files || [])){
+        try{
+          const text = await readTextFileUTF8(file);
+          records.push(...parseWeeklyOutboundPlanCSV(text, file.name || 'Plan CSV'));
+        }catch(err){
+          console.error(err);
+          alert(`อ่านไฟล์ ${file?.name || ''} ไม่สำเร็จ`);
+        }
+      }
+      return records;
+    }
+
+    function rowsFromOutboundSnapshot(raw, year){
+      const out = [];
+      for(const [date, dateData] of Object.entries(raw || {})){
+        if(!date.startsWith(`${year}-`)) continue;
+        const rowsObj = dateData?.rows || dateData || {};
+        const rows = sortRows(rowsObj).map(row => ({ ...row, page:OUTBOUND_PAGE, date }));
+        out.push(...rows);
+      }
+      return out;
+    }
+
+    async function getOutboundRowsForExportYear(year){
+      const snap = await get(ref(db, `${pageRoot(OUTBOUND_PAGE)}/plans`));
+      return rowsFromOutboundSnapshot(snap.val() || {}, year);
+    }
+
+    function weeklyOutboundWebRecords(webRows){
+      const seen = new Set();
+      const records = [];
+      for(const row of webRows || []){
+        const productName = normalizeOutboundProductDisplay(row.productName || row.itemNumber || '');
+        const type = normalizePackType(row.packType) || calcPackType(row.bags, row.kg) || '';
+        const productKey = normalizeWeeklyOutboundProductKey(productName);
+        if(!row.date || !productKey || !type) continue;
+        const containerNo = String(row.exportRound || row.tripNo || row.allocateText || '').trim();
+        const booking = String(row.bookingNo || '').trim();
+        const uniqueKey = [row.date, productKey, type, booking, containerNo || row.id || row.sourceQty || row.bags].join('|');
+        if(seen.has(uniqueKey)) continue;
+        seen.add(uniqueKey);
+        records.push({
+          date:row.date,
+          productName,
+          refName:productName,
+          type,
+          qty:1,
+          booking,
+          source:'WEB',
+          remark:[booking ? `Booking: ${booking}` : '', 'โหลดสำเร็จจากหน้าเว็บส่งออก'].filter(Boolean).join(' / ')
+        });
+      }
+      return records;
+    }
+
+    function combineWeeklyOutboundRecords(webRecords, planRecords){
+      const map = new Map();
+      const ensure = (rec) => {
+        const productKey = normalizeWeeklyOutboundProductKey(rec.productName);
+        const type = normalizePackType(rec.type) || rec.type || '';
+        const key = [rec.date, productKey, type].join('|');
+        if(!productKey || !rec.date) return null;
+        if(!map.has(key)){
+          map.set(key, {
+            date:rec.date,
+            productKey,
+            productName:normalizeOutboundProductDisplay(rec.productName),
+            refName:normalizeOutboundProductDisplay(rec.refName || rec.productName),
+            type,
+            webQty:0,
+            planQty:0,
+            webRemarks:new Set(),
+            planRemarks:new Set()
+          });
+        }
+        return map.get(key);
+      };
+
+      for(const rec of planRecords || []){
+        const item = ensure(rec);
+        if(!item) continue;
+        item.planQty += num(rec.qty);
+        if(rec.remark) item.planRemarks.add(rec.remark);
+        if(!item.productName) item.productName = normalizeOutboundProductDisplay(rec.productName);
+      }
+      for(const rec of webRecords || []){
+        const item = ensure(rec);
+        if(!item) continue;
+        item.webQty += num(rec.qty) || 1;
+        if(rec.remark) item.webRemarks.add(rec.remark);
+        // ข้อมูลจากหน้าเว็บเป็นงานโหลดสำเร็จ ให้ใช้ชื่อ Item Number ในเว็บเป็นชื่อหลัก
+        item.productName = normalizeOutboundProductDisplay(rec.productName) || item.productName;
+        item.refName = normalizeOutboundProductDisplay(rec.refName || rec.productName) || item.refName;
+      }
+
+      return Array.from(map.values()).map(item => {
+        const qty = item.webQty > 0 && item.planQty > 0 ? Math.max(item.webQty, item.planQty) : (item.webQty || item.planQty);
+        const source = item.webQty > 0 && item.planQty > 0 ? 'WEB/CSV' : (item.webQty > 0 ? 'WEB' : 'CSV');
+        const remarks = item.webQty > 0 ? item.webRemarks : item.planRemarks;
+        return {
+          ...item,
+          qty,
+          source,
+          remark:[source === 'WEB' ? 'จากหน้าเว็บ' : source === 'CSV' ? 'จากไฟล์ Plan Load KNS' : 'จากหน้าเว็บ + ไฟล์ Plan Load KNS', ...Array.from(remarks).slice(0,2)].filter(Boolean).join(' / ')
+        };
+      }).filter(item => item.qty > 0).sort((a,b) => {
+        const dateDiff = String(a.date).localeCompare(String(b.date));
+        if(dateDiff) return dateDiff;
+        return String(a.productName || '').localeCompare(String(b.productName || ''), 'th', { numeric:true });
+      });
+    }
+
+    function weeklyOutboundActualFormula(rowNumber){
+      const qtyCols = ['G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W'];
+      return qtyCols.slice().reverse().reduce((acc, col) => `IF(${col}${rowNumber}<>"",${col}${rowNumber},${acc})`, '0');
+    }
+
+    function createWeeklyOutboundSheet(year, monthIndex, allRows, extractDate){
+      const st = excelBaseStyles();
+      const days = monthDays(year, monthIndex);
+      const monthRows = (allRows || []).filter(row => Number(String(row.date).slice(5,7)) === monthIndex + 1);
+      const byDate = new Map();
+      for(const row of monthRows){
+        if(!byDate.has(row.date)) byDate.set(row.date, []);
+        byDate.get(row.date).push(row);
+      }
+
+      const fixedBlock = 11;
+      let totalRows = 4;
+      for(let day=1; day<=days; day++){
+        const iso = `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        totalRows += Math.max(fixedBlock, (byDate.get(iso) || []).length);
+      }
+      totalRows += 3;
+      const totalCols = 28; // A:AB
+      const ws = XLSX.utils.aoa_to_sheet(Array.from({length:totalRows}, () => Array(totalCols).fill('')));
+      ws['!cols'] = [
+        {wch:12},{wch:12},{wch:28},{wch:34},{wch:28},{wch:8},
+        {wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},
+        {wch:9},{wch:8},{wch:8},{wch:10},{wch:14}
+      ];
+      ws['!rows'] = Array.from({length:totalRows}, (_,i) => ({ hpt: i < 4 ? 24 : 19 }));
+      ws['!merges'] = [];
+
+      const center = { horizontal:'center', vertical:'center', wrapText:true };
+      const left = { horizontal:'left', vertical:'center', wrapText:true };
+      const border = st.border;
+      const titleStyle = { font:{bold:true, sz:14}, alignment:center, border };
+      const greyHeader = { font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'D9D9D9'}}, border };
+      const qtyHeader = { font:{bold:true, sz:9, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'D9D9D9'}}, border };
+      const qtyTop = { font:{bold:true, sz:9, color:{rgb:'FF0000'}}, alignment:{...center, textRotation:90}, fill:{fgColor:{rgb:'D9D9D9'}}, border };
+      const actualTop = { font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'92D050'}}, border };
+      const body = { font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border };
+      const bodyText = { font:{sz:10}, alignment:left, fill:{fgColor:{rgb:'FFF2CC'}}, border };
+      const bodyBold = { font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border };
+      const redQty = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, numFmt:'#,##0', border };
+      const formulaStyle = { font:{sz:10, color:{rgb:'FF0000'}}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, numFmt:'#,##0', border };
+
+      setCell(ws, 1, 5, 'Date ', greyHeader);
+      setCell(ws, 1, 6, dayDateText(extractDate || currentDate || `${year}-${String(monthIndex + 1).padStart(2,'0')}-01`), greyHeader);
+      setCell(ws, 2, 1, `ตารางสรุปขาออก (Outbound) ตั้งแต่ 1 ถึง ${days} ${MONTH_FULL_TH[monthIndex]} ${String(year + 543).slice(-2)}`, titleStyle);
+      ws['!merges'].push({s:{r:2,c:1}, e:{r:2,c:5}});
+
+      setCell(ws, 2, 6, "Original Plan Q'ty", qtyTop);
+      for(let c=7; c<=22; c++) setCell(ws, 2, c, `Revise ${c - 6}`, qtyTop);
+      setCell(ws, 2, 23, 'Actual Ship', actualTop);
+      ws['!merges'].push({s:{r:2,c:23}, e:{r:2,c:25}});
+      setCell(ws, 2, 26, 'Total Ctn', greyHeader);
+      ws['!merges'].push({s:{r:2,c:26}, e:{r:3,c:26}});
+      setCell(ws, 2, 27, 'Status', greyHeader);
+      ws['!merges'].push({s:{r:2,c:27}, e:{r:3,c:27}});
+
+      ['Day','Date','Products','Remark','Ref Name','Type'].forEach((h, i) => setCell(ws, 3, i, h, greyHeader));
+      for(let c=6; c<=23; c++) setCell(ws, 3, c, "Q'ty", c === 23 ? actualTop : greyHeader);
+      setCell(ws, 3, 24, 'JB', actualTop);
+      setCell(ws, 3, 25, 'PP', actualTop);
+
+      let rowIndex = 4;
+      for(let day=1; day<=days; day++){
+        const iso = `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const list = [...(byDate.get(iso) || [])].sort((a,b) => String(a.productName || '').localeCompare(String(b.productName || ''), 'th', { numeric:true }));
+        const blockRows = Math.max(fixedBlock, list.length);
+        const start = rowIndex;
+        const end = rowIndex + blockRows - 1;
+        const excelStart = start + 1;
+        const excelEnd = end + 1;
+        const d = jsDateFromISO(iso);
+
+        if(blockRows > 1){
+          ws['!merges'].push({s:{r:start,c:0}, e:{r:end,c:0}});
+          ws['!merges'].push({s:{r:start,c:1}, e:{r:end,c:1}});
+          for(const c of [24,25,26,27]) ws['!merges'].push({s:{r:start,c}, e:{r:end,c}});
+        }
+        setCell(ws, start, 0, DAY_TH[d.getDay()], bodyBold);
+        setCell(ws, start, 1, dayDateText(iso), bodyBold);
+        setFormula(ws, start, 24, `SUMIF($F${excelStart}:$F${excelEnd},"JB",X${excelStart}:X${excelEnd})`, formulaStyle);
+        setFormula(ws, start, 25, `SUMIF($F${excelStart}:$F${excelEnd},"PP",X${excelStart}:X${excelEnd})`, formulaStyle);
+        setFormula(ws, start, 26, `Y${excelStart}+Z${excelStart}`, formulaStyle);
+        setFormula(ws, start, 27, `IF(AA${excelStart}=0,"ไม่มีโหลดสินค้า","")`, bodyBold);
+
+        for(let i=0; i<blockRows; i++){
+          const r = start + i;
+          const excelRow = r + 1;
+          const item = list[i];
+          if(i > 0){
+            setCell(ws, r, 0, '', bodyBold);
+            setCell(ws, r, 1, '', bodyBold);
+            for(const c of [24,25,26,27]) setCell(ws, r, c, '', formulaStyle);
+          }
+          setCell(ws, r, 2, item?.productName || '', bodyText);
+          setCell(ws, r, 3, item?.remark || '', bodyText);
+          setCell(ws, r, 4, item?.refName || item?.productName || '', bodyText);
+          setCell(ws, r, 5, item?.type || '', bodyBold);
+          setCell(ws, r, 6, item ? num(item.qty) : '', redQty, item ? 'n' : null);
+          for(let c=7; c<=22; c++) setCell(ws, r, c, '', body);
+          setFormula(ws, r, 23, weeklyOutboundActualFormula(excelRow), formulaStyle);
+        }
+        rowIndex += blockRows;
+      }
+
+      ws['!autofilter'] = { ref:XLSX.utils.encode_range({s:{r:3,c:0}, e:{r:Math.max(rowIndex - 1, 4), c:27}}) };
+      ws['!freeze'] = { xSplit:0, ySplit:4 };
+      ws['!printArea'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rowIndex - 1,c:27}});
+      return ws;
+    }
+
+    async function exportWeeklyOutboundExcel(planFiles=[]){
+      if(!ensureExcelLibrary()) return;
+      if(currentPage !== OUTBOUND_PAGE){
+        alert('ปุ่มนี้ใช้สำหรับหน้า “ส่งออก” เท่านั้น กรุณาเปิดหน้า ส่งออก ก่อน');
+        return;
+      }
+      const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const webRows = await getOutboundRowsForExportYear(year);
+      const planRecords = await parseWeeklyOutboundPlanFiles(planFiles);
+      const webRecords = weeklyOutboundWebRecords(webRows);
+      const combined = combineWeeklyOutboundRecords(webRecords, planRecords)
+        .filter(row => String(row.date).startsWith(`${year}-`));
+
+      if(!combined.length){
+        alert('ยังไม่มีข้อมูลสำหรับทำ Weekly Outbound: หน้าเว็บส่งออกยังว่าง และยังไม่ได้แนบไฟล์ Plan Load CSV');
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      for(let month=0; month<12; month++){
+        const ws = createWeeklyOutboundSheet(year, month, combined, currentDate);
+        XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`${MONTH_SHORT_EN[month].toUpperCase()} ${year}`));
+      }
+      downloadWorkbook(wb, `Weekly Outbound Plan ${year}.xlsx`);
+      const planCount = planRecords.length;
+      const webCount = webRecords.length;
+      console.log(`Weekly Outbound exported: web=${webCount}, plan=${planCount}, combined=${combined.length}`);
+    }
+
+    async function handleWeeklyOutboundExportClick(){
+      if(currentPage !== OUTBOUND_PAGE){
+        alert('ปุ่ม Export Weekly Outbound ใช้ในหน้า “ส่งออก” เท่านั้นค่ะ');
+        return;
+      }
+      const useFiles = confirm('ต้องการแนบไฟล์ Plan Load CSV เพื่อดึงงานที่ยังไม่โหลดไหม?\n\nกด OK แล้วเลือกไฟล์ JUL - STP 1/2 Plan load 2026.csv ได้หลายไฟล์\nกด Cancel เพื่อส่งออกจากข้อมูลที่มีในหน้าเว็บส่งออกอย่างเดียว');
+      if(useFiles){
+        weeklyOutboundPlanInput.value = '';
+        weeklyOutboundPlanInput.click();
+      }else{
+        await exportWeeklyOutboundExcel([]);
+      }
+    }
+
     async function exportWeeklyInboundExcel(){
       if(!ensureExcelLibrary()) return;
       const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
@@ -4139,6 +4588,12 @@
     });
     $("exportPlanExcelBtn").addEventListener("click", exportPlanExcelLikeImage);
     $("exportWeeklyExcelBtn").addEventListener("click", exportWeeklyInboundExcel);
+    $("exportWeeklyOutboundBtn").addEventListener("click", handleWeeklyOutboundExportClick);
+    weeklyOutboundPlanInput.addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files || []);
+      if(files.length) await exportWeeklyOutboundExcel(files);
+      e.target.value = "";
+    });
     $("exportBalanceExcelBtn").addEventListener("click", exportBalanceInboundExcel);
     $("copyYesterdayBtn").addEventListener("click", copyYesterday);
 
