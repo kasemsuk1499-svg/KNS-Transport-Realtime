@@ -3775,8 +3775,10 @@
       const records = [];
       for(const obj of objects || []){
         const loadText = getCSVField(obj, ['Load']);
-        // ถ้า Load เป็น STP อย่างเดียวให้ตัดออก แต่ถ้ามี KNS อยู่ด้วยให้ใช้ส่วน KNS
-        if(!/KNS/i.test(String(loadText || ''))) continue;
+        const loadNormalized = String(loadText || '').toUpperCase().replace(/\s+/g, ' ');
+        // ดึงเฉพาะงาน KNS เท่านั้น และถ้าช่อง Load มีคำว่า STP ให้ตัดออกเลยตามไฟล์ STP1
+        if(!/KNS/.test(loadNormalized)) continue;
+        if(/STP/.test(loadNormalized)) continue;
 
         const productRaw = getCSVField(obj, ['Product']);
         const productName = normalizeOutboundProductDisplay(productRaw);
@@ -3793,19 +3795,21 @@
         const booking = String(getCSVField(obj, ['Booking'])).trim();
         const etd = String(getCSVField(obj, ['ETD'])).replace(/\s+/g, ' ').trim();
         const topic = String(getCSVField(obj, ['ชื่อเรื่อง', 'Subject'])).trim();
-        const knsOverride = knsFclOverrideFromLoadText(loadText);
 
         for(const item of dateFcls){
-          const fcl = knsOverride || item.fcl;
+          // ช่อง Original Plan Q'ty ใน Weekly Outbound ต้องเป็น "จำนวนตู้ของวันนั้น"
+          // จึงใช้ค่า x จาก dd/mm/yyyy - x Fcl โดยตรง ส่วนจำนวนถุง/ตู้เอาไว้ทำ Remark เท่านั้น
+          const fcl = item.fcl;
           const qtyPerContainer = weeklyQtyPerContainerFromMT(quantityMT, type, fcl);
-          if(!qtyPerContainer) continue;
+          if(!fcl) continue;
           records.push({
             date:item.date,
             productName,
             refName:productName,
             type,
-            qty:qtyPerContainer,
+            qty:fcl,
             fclCount:fcl,
+            qtyPerContainer,
             booking,
             source:'FILE',
             side,
@@ -4027,21 +4031,29 @@
 
     function weeklyOutboundWebRecords(webRows){
       const records = [];
+      const seenContainers = new Set();
       for(const row of webRows || []){
         const productName = normalizeOutboundProductDisplay(row.productName || row.itemNumber || '');
         const type = normalizePackType(row.packType) || calcPackType(row.bags, row.kg) || '';
         const productKey = normalizeWeeklyOutboundProductKey(productName);
         if(!row.date || !productKey || !type) continue;
-        const qty = num(row.bags) || num(row.sourceQty) || 0;
-        if(!qty) continue;
+        const loadedQty = num(row.bags) || num(row.sourceQty) || 0;
+        if(!loadedQty) continue;
         const booking = String(row.bookingNo || '').trim();
-        const cleanRemark = String(row.remark || row.bookingRemark || '').split('/').map(x => x.trim()).find(x => /โหลด.*ตู้ละ.*ถุง/.test(x)) || weeklyOutboundLoadRemark(type, qty);
+        const round = String(row.exportRound || row.tripNo || row.allocateText || row.id || '').trim();
+        const uniqueKey = [row.date, productKey, type, booking, round].join('|');
+        // หน้าเว็บ 1 แถว = งานที่โหลดแล้ว 1 ตู้ แต่กันกรณีสินค้าเดียวกันแยกหลาย Location ในตู้เดียวกัน
+        if(seenContainers.has(uniqueKey)) continue;
+        seenContainers.add(uniqueKey);
+        const cleanRemark = String(row.remark || row.bookingRemark || '').split('/').map(x => x.trim()).find(x => /โหลด.*ตู้ละ.*ถุง/.test(x)) || weeklyOutboundLoadRemark(type, loadedQty);
         records.push({
           date:row.date,
           productName,
           refName:productName,
           type,
-          qty,
+          qty:1,
+          fclCount:1,
+          qtyPerContainer:loadedQty,
           booking,
           source:'WEB',
           remark:cleanRemark,
@@ -4076,7 +4088,7 @@
         return map.get(key);
       };
 
-      const mergeQty = (oldQty, newQty) => Math.max(num(oldQty), num(newQty));
+      const mergeQty = (oldQty, newQty) => num(oldQty) + num(newQty);
 
       for(const rec of planRecords || []){
         const item = ensure(rec);
