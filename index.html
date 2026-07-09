@@ -896,6 +896,51 @@
     body[data-page="OUT"] tr.tank-shade-a td.location-cell,
     body[data-page="OUT"] tr.tank-shade-b td.location-cell{background:#fffbeb}
 
+
+    .excel-upload-box{
+      margin-top:10px;
+      padding:10px;
+      border:1px dashed #f79009;
+      border-radius:12px;
+      background:#fff7ed;
+      display:grid;
+      gap:6px;
+      text-align:left;
+    }
+    .excel-upload-box input{
+      width:100%;
+      background:#fff;
+    }
+    .outbound-booking-cell input,
+    .outbound-container-cell input{
+      font-weight:900;
+      color:#7c2d12;
+    }
+    .outbound-fcl-chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:46px;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#ffedd5;
+      border:1px solid #fb923c;
+      font-weight:900;
+      color:#7c2d12;
+    }
+    .outbound-alloc-cell input{
+      font-weight:900;
+      color:#9a3412;
+    }
+    .outbound-remark textarea{
+      min-height:52px;
+    }
+    body[data-page="OUT"] .table-wrap table{
+      min-width:1680px;
+    }
+    body[data-page="OUT"] tr.group-start td{border-top:4px solid #9a3412}
+    body[data-page="OUT"] tr.group-end td{border-bottom:4px solid #9a3412}
+
     @media (max-width:760px){
       .todo-widget,
       .empty-locations-widget{position:relative;top:auto;left:auto;right:auto;width:auto;margin:12px 0;z-index:1}
@@ -977,10 +1022,10 @@
       </div>
     </aside>
     <section class="status">
-      <div class="stat"><span>จำนวนเที่ยวรถ</span><b id="totalTrips">0</b></div>
-      <div class="stat"><span>จำนวนถุงรวม</span><b id="totalBags">0</b></div>
-      <div class="stat"><span>น้ำหนักรวม Kg</span><b id="totalKg">0.00</b></div>
-      <div class="stat"><span>จำนวนพาเลทรวม</span><b id="totalPallets">0</b></div>
+      <div class="stat"><span id="totalTripsLabel">จำนวนเที่ยวรถ</span><b id="totalTrips">0</b></div>
+      <div class="stat"><span id="totalBagsLabel">จำนวนถุงรวม</span><b id="totalBags">0</b></div>
+      <div class="stat"><span id="totalKgLabel">น้ำหนักรวม Kg</span><b id="totalKg">0.00</b></div>
+      <div class="stat"><span id="totalPalletsLabel">จำนวนพาเลทรวม</span><b id="totalPallets">0</b></div>
     </section>
 
     <section class="panel">
@@ -995,7 +1040,7 @@
 
       <div class="table-wrap">
         <table>
-          <thead>
+          <thead id="tableHead">
             <tr>
               <th class="col-trip">No.</th>
               <th class="col-product">Product name</th>
@@ -1023,11 +1068,16 @@
     <div class="dialog-head">นำเข้าข้อมูล CSV</div>
     <div class="dialog-body">
       <p class="hint">
-        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. โปรแกรมจะเติม No. ตามแถวก่อนหน้า และคำนวณ PP/JB จาก Quantity (Kg) ÷ Quantity (bag) ให้อัตโนมัติ สำหรับหน้า “ส่งออก” รองรับรูปแบบ Booking: Location, Item Number, Qty, Qty Allocate, UOM, Status, Batch โดย Qty Allocate เช่น 1(20) 2(20) จะถูกแยกเป็นคันส่งออกตามเลขหน้าวงเล็บ และใช้จำนวนในวงเล็บเป็นจำนวนที่ตัดจริง
+        วางข้อมูลจาก Excel ได้เลย รองรับทั้งแบบคั่นด้วย Tab, CSV และแบบคัดลอกจากตารางที่แถวต่อเนื่องไม่มีเลข No. สำหรับหน้า “ส่งออก” แนะนำแนบไฟล์ Excel โดยตรง: ระบบจะอ่านทุกชีทที่มี Location / Item Number / Qty Allocate, แยกตู้จาก 1(740), ใช้ Booking จากบรรทัดก่อน ETD และข้าม Batch No Print_No Print อัตโนมัติ
       </p>
       <textarea id="csvInput" placeholder="ตัวอย่าง:
 1	STAB-A T0170	A26060723	A070725A4	960	24,000.00	16	Plastic pallet (60)
 	STAB-A T0170	A26060723	A070724A8	120	3,000.00	2	Plastic pallet (60)"></textarea>
+      <div class="excel-upload-box">
+        <b>นำเข้า Excel สำหรับหน้า “ส่งออก”</b>
+        <span class="hint">รองรับไฟล์หลายชีทแบบ Location / Item Number / Qty Allocate และอ่าน Booking จากบรรทัดก่อน ETD อัตโนมัติ</span>
+        <input id="excelInput" type="file" accept=".xlsx,.xls" />
+      </div>
     </div>
     <div class="dialog-foot">
       <button id="cancelImportBtn" class="light">ยกเลิก</button>
@@ -1088,6 +1138,7 @@
     const $ = (id) => document.getElementById(id);
     const dateInput = $("dateInput");
     const tbody = $("tbody");
+    const tableHead = $("tableHead");
     const pageName = $("pageName");
     const pageTabs = Array.from(document.querySelectorAll(".page-tab"));
     const syncDot = $("syncDot");
@@ -1106,6 +1157,10 @@
     const emptyLocationCopyBtn = $("emptyLocationCopyBtn");
     const emptyLocationManualInput = $("emptyLocationManualInput");
     const emptyLocationManualAddBtn = $("emptyLocationManualAddBtn");
+    const totalTripsLabel = $("totalTripsLabel");
+    const totalBagsLabel = $("totalBagsLabel");
+    const totalKgLabel = $("totalKgLabel");
+    const totalPalletsLabel = $("totalPalletsLabel");
 
     let currentDate = "";
     let currentPage = localStorage.getItem("knsTransportPage") || "STP";
@@ -1890,11 +1945,69 @@
       });
     }
 
+    function currentTableColspan(){
+      return currentPage === OUTBOUND_PAGE ? 14 : 11;
+    }
+
+    function renderTableHeader(){
+      if(!tableHead) return;
+      if(currentPage === OUTBOUND_PAGE){
+        tableHead.innerHTML = `
+            <tr>
+              <th class="col-booking">Booking</th>
+              <th class="col-trip">ตู้</th>
+              <th class="col-fcl">FCL</th>
+              <th class="col-location location">Location</th>
+              <th class="col-product">Item Number</th>
+              <th class="col-batch">Batch</th>
+              <th class="col-tank">Tank code</th>
+              <th class="col-num">Qty ต้นทาง</th>
+              <th class="col-num">Qty Allocate</th>
+              <th class="col-pack">PP/JB</th>
+              <th class="col-num">Kg</th>
+              <th class="col-status">Inventory Status</th>
+              <th class="col-remark">Remark / ETD</th>
+              <th class="col-actions">จัดการ</th>
+            </tr>`;
+        return;
+      }
+      tableHead.innerHTML = `
+            <tr>
+              <th class="col-trip">No.</th>
+              <th class="col-product">Product name</th>
+              <th class="col-batch">Batch No.</th>
+              <th class="col-tank">Tank code</th>
+              <th class="col-num">Quantity (bag)</th>
+              <th class="col-num">Quantity (Kg)</th>
+              <th class="col-num">Quantity (pallet)</th>
+              <th class="col-pack">PP/JB</th>
+              <th class="col-remark">Remark</th>
+              <th class="col-location location">LOCATION</th>
+              <th class="col-actions">จัดการ</th>
+            </tr>`;
+    }
+
+    function applyStatLabels(){
+      if(currentPage === OUTBOUND_PAGE){
+        totalTripsLabel.textContent = 'จำนวนตู้โหลด';
+        totalBagsLabel.textContent = 'Qty Allocate รวม';
+        totalKgLabel.textContent = 'น้ำหนักรวม Kg';
+        totalPalletsLabel.textContent = 'จำนวน Booking';
+      }else{
+        totalTripsLabel.textContent = 'จำนวนเที่ยวรถ';
+        totalBagsLabel.textContent = 'จำนวนถุงรวม';
+        totalKgLabel.textContent = 'น้ำหนักรวม Kg';
+        totalPalletsLabel.textContent = 'จำนวนพาเลทรวม';
+      }
+    }
+
     function applyPageUI(){
       if(!PAGE_LABELS[currentPage]) currentPage = "STP";
       pageTabs.forEach(btn => btn.classList.toggle("active", btn.dataset.page === currentPage));
       document.body.dataset.page = currentPage;
       pageName.textContent = PAGE_LABELS[currentPage] || currentPage;
+      renderTableHeader();
+      applyStatLabels();
       document.title = `KNS ${PAGE_LABELS[currentPage] || currentPage} แผนขนย้ายสินค้าแบบเรียลไทม์`;
     }
 
@@ -1928,7 +2041,7 @@
       if(unsubscribe) unsubscribe();
       if(tankLocationUnsubscribe) tankLocationUnsubscribe();
       if(productOptionsUnsubscribe) productOptionsUnsubscribe();
-      tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${currentTableColspan()}" style="padding:18px">กำลังโหลดข้อมูลหน้า ${currentPage}...</td></tr>`;
 
       productOptionsUnsubscribe = onValue(productOptionsRef(), (snap) => {
         productOptionsCache = snap.val() || {};
@@ -1967,7 +2080,9 @@
       const uniqueTrips = new Set(rowsCache.map(r => String(r.tripNo || "").trim()).filter(Boolean));
       const bags = rowsCache.reduce((s,r)=>s+num(r.bags),0);
       const kg = rowsCache.reduce((s,r)=>s+num(r.kg),0);
-      const pallets = rowsCache.reduce((s,r)=>s+num(r.pallets),0);
+      const pallets = currentPage === OUTBOUND_PAGE
+        ? new Set(rowsCache.map(r => String(r.bookingNo || '').trim()).filter(Boolean)).size
+        : rowsCache.reduce((s,r)=>s+num(r.pallets),0);
       $("totalTrips").textContent = fmt(uniqueTrips.size);
       $("totalBags").textContent = fmt(bags);
       $("totalKg").textContent = fmt(kg,2);
@@ -2209,6 +2324,79 @@
       alert(`เลื่อนคัน No. ${tripNo} ไปวันที่ ${targetDate} เรียบร้อยแล้ว`);
     }
 
+    function outboundInputCell(row, field, type="text", options={}){
+      const value = row[field] ?? "";
+      const classes = options.className ? ` class="${options.className}"` : '';
+      if(options.textarea){
+        return `<textarea data-id="${row.id}" data-field="${field}">${escapeHtml(value)}</textarea>`;
+      }
+      if(field === "packType") return inputCell(row, field);
+      return `<input${classes} data-id="${row.id}" data-field="${field}" type="${type}" value="${escapeAttr(value)}" />`;
+    }
+
+    function outboundLocationCell(row){
+      const locationValue = String(row?.location ?? '').trim();
+      const noteParts = [
+        row.sourceSheet ? `ชีท: ${row.sourceSheet}` : '',
+        row.bookingNo ? `Booking: ${row.bookingNo}` : '',
+        row.etdText || ''
+      ].filter(Boolean);
+      return `<td class="location-cell" style="${locationColorStyle(locationValue)}">
+        <div class="location-editor">
+          <textarea class="location-textarea" data-id="${row.id}" data-field="location" title="${escapeAttr(noteParts.join(' / ') || 'Location ต้นทางจาก Excel')}">${escapeHtml(locationValue)}</textarea>
+          <div class="location-meta">${escapeHtml(noteParts.join(' / ') || 'Location ต้นทางจาก Excel')}</div>
+        </div>
+      </td>`;
+    }
+
+    function renderOutboundRows(){
+      const tankShadeClasses = buildTankShadeClasses(rowsCache);
+      tbody.innerHTML = rowsCache.map((row, index) => {
+        const prev = rowsCache[index - 1];
+        const next = rowsCache[index + 1];
+        const booking = String(row.bookingNo || '').trim();
+        const containerNo = String(row.tripNo || row.exportRound || '').trim();
+        const prevKey = `${String(prev?.bookingNo || '').trim()}__${String(prev?.tripNo || prev?.exportRound || '').trim()}`;
+        const rowKey = `${booking}__${containerNo}`;
+        const nextKey = `${String(next?.bookingNo || '').trim()}__${String(next?.tripNo || next?.exportRound || '').trim()}`;
+        const isGroupStart = index === 0 || prevKey !== rowKey;
+        const isGroupEnd = index === rowsCache.length - 1 || nextKey !== rowKey;
+        const classes = [
+          tankShadeClasses.get(row.id) || 'tank-shade-a',
+          isGroupStart ? 'group-start' : '',
+          isGroupEnd ? 'group-end' : '',
+          tripStatusClass(row)
+        ].filter(Boolean).join(' ');
+        const fclValue = row.fclCount ? `${row.fclCount} FCL` : '';
+        const remarkValue = row.remark || [row.etdText, row.bookingRemark].filter(Boolean).join(' / ');
+        return `
+        <tr class="${classes}">
+          <td class="outbound-booking-cell">${outboundInputCell(row,'bookingNo')}</td>
+          <td class="outbound-container-cell">${outboundInputCell(row,'tripNo','number')}</td>
+          <td><div class="outbound-fcl-chip">${escapeHtml(fclValue || '-')}</div>${outboundInputCell(row,'fclCount','number')}</td>
+          ${outboundLocationCell(row)}
+          <td>${outboundInputCell(row,'productName')}</td>
+          <td>${outboundInputCell(row,'batchNo')}</td>
+          <td>${outboundInputCell(row,'tankCode')}</td>
+          <td>${outboundInputCell(row,'sourceQty','number')}</td>
+          <td class="outbound-alloc-cell">${outboundInputCell(row,'bags','number')}</td>
+          <td>${outboundInputCell(row,'packType')}</td>
+          <td>${outboundInputCell(row,'kg','number')}</td>
+          <td>${outboundInputCell(row,'inventoryStatus')}</td>
+          <td class="outbound-remark">${outboundInputCell({...row, remark:remarkValue},'remark','text',{textarea:true})}</td>
+          <td>
+            <div class="row-actions">
+              <button class="secondary" data-action="insert-trip" data-id="${row.id}" title="เพิ่มตู้ถัดจากตู้/บุ๊กกิ้งนี้">+ ตู้</button>
+              <button class="light" data-action="dup" data-id="${row.id}" title="คัดลอกแถว">คัดลอก</button>
+              <button class="danger" data-action="del" data-id="${row.id}" title="ลบแถว">ลบ</button>
+              ${tripStatusButtons(row, isGroupStart)}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+      renderProductDatalist();
+    }
+
     function renderRows(){
       // ถ้าผู้ใช้กำลังพิมพ์อยู่ ยังไม่ให้ realtime render มาทับข้อความที่ยังไม่ได้กด Enter
       if(hasPendingEdit() && tbody.contains(document.activeElement)){
@@ -2216,9 +2404,13 @@
       }
       if(!rowsCache.length){
         const emptyText = currentPage === OUTBOUND_PAGE
-          ? 'ยังไม่มีข้อมูลส่งออกของวันนี้ กด “เพิ่มคันท้ายสุด” หรือนำเข้า CSV เพื่อเริ่มคีย์แป้งส่งออก'
+          ? 'ยังไม่มีข้อมูลส่งออกของวันนี้ กด “เพิ่มคันท้ายสุด” หรือแนบ Excel เพื่อนำเข้างานโหลด'
           : 'ยังไม่มีข้อมูลของวันนี้ กด “เพิ่มคันท้ายสุด” เพื่อเริ่มใส่แผนขนย้าย';
-        tbody.innerHTML = `<tr><td colspan="11" style="padding:18px">${emptyText}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${currentTableColspan()}" style="padding:18px">${emptyText}</td></tr>`;
+        return;
+      }
+      if(currentPage === OUTBOUND_PAGE){
+        renderOutboundRows();
         return;
       }
       const locationSpans = buildLocationSpans(rowsCache);
@@ -2439,9 +2631,17 @@
         locationUpdatedAt: knownLocation?.updatedAt ?? null,
         tripStatus: prefill.tripStatus ?? "",
         bookingNo: prefill.bookingNo ?? "",
+        fclCount: prefill.fclCount ?? "",
+        bookingDateText: prefill.bookingDateText ?? "",
         allocateText: prefill.allocateText ?? "",
         exportRound: prefill.exportRound ?? "",
         sourceQty: prefill.sourceQty ?? "",
+        inventoryStatus: prefill.inventoryStatus ?? "",
+        uomRaw: prefill.uomRaw ?? "",
+        batchRaw: prefill.batchRaw ?? "",
+        etdText: prefill.etdText ?? "",
+        sourceSheet: prefill.sourceSheet ?? "",
+        bookingRemark: prefill.bookingRemark ?? "",
         carryOver: !!prefill.carryOver,
         carryOverFrom: prefill.carryOverFrom ?? null,
         carryOverAt: prefill.carryOverAt ?? null,
@@ -2531,7 +2731,7 @@
 
       try{
         let value = rawValue;
-        if(["tripNo","bags","kg","pallets"].includes(field)){
+        if(["tripNo","bags","kg","pallets","sourceQty","fclCount"].includes(field)){
           value = value === "" ? "" : Number(value);
         }
         if(field === "packType"){
@@ -3493,6 +3693,8 @@
       const { batchNo, tankCode } = splitBatchTankText(batchCell);
       const qtyNumber = num(qty);
       const packType = /JB|850/i.test(uom) ? 'JB' : (/PP|25/i.test(uom) ? 'PP' : '');
+      const noPrintBatch = /no\s*print/i.test(batchCell);
+      if(currentPage === OUTBOUND_PAGE && (noPrintBatch || !packType || !allocations.length)) return null;
       const factor = packType === 'JB' ? 850 : (packType === 'PP' ? 25 : 0);
       const baseRemarkParts = [
         bookingNo ? `Booking: ${bookingNo}` : '',
@@ -3513,9 +3715,12 @@
           remark:[...baseRemarkParts, round ? `Allocate: ${round}(${usedQty})` : (allocateText ? `Allocate: ${allocateText}` : ''), `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / ') || 'ส่งออก',
           location,
           bookingNo,
-          allocateText,
+          allocateText: round ? `${round}(${usedQty})` : allocateText,
           exportRound: round,
-          sourceQty: qty
+          sourceQty: qty,
+          inventoryStatus,
+          uomRaw:uom,
+          batchRaw:batchCell
         };
       };
 
@@ -3558,12 +3763,167 @@
       };
     }
 
+    function nonEmptyFirstCellLinesFromAoa(aoa){
+      return (aoa || [])
+        .map(row => String((row || []).find(cell => String(cell ?? '').trim()) ?? '').trim())
+        .filter(Boolean);
+    }
+
+    function extractOutboundMetaFromLines(lines){
+      const cleanLines = (lines || []).map(x => String(x || '').replace(/ /g, ' ').trim()).filter(Boolean);
+      const fclLine = cleanLines.find(line => /FCL/i.test(line) && /\d{1,2}\/\d{1,2}\/\d{4}/.test(line)) || '';
+      const fclMatch = fclLine.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*-\s*(\d+)\s*FCL/i);
+      const etdIndex = cleanLines.findIndex(line => /^ETD/i.test(line));
+      const scanEnd = etdIndex >= 0 ? etdIndex : cleanLines.length;
+      let bookingNo = '';
+      for(let i = scanEnd - 1; i >= 0; i--){
+        const candidate = cleanLines[i];
+        if(candidate === fclLine) break;
+        if(/^(?:GTD|BKKGJ|[A-Z]{3,}\d{5,})[A-Z0-9\/-]*$/i.test(candidate)){
+          bookingNo = candidate.toUpperCase();
+          break;
+        }
+      }
+      if(!bookingNo){
+        const direct = cleanLines.find(line => /^(?:GTD|BKKGJ)[A-Z0-9\/-]{5,}$/i.test(line));
+        if(direct) bookingNo = direct.toUpperCase();
+      }
+      const remarkStart = fclLine ? cleanLines.indexOf(fclLine) : -1;
+      const remarkLines = remarkStart >= 0 ? cleanLines.slice(remarkStart, Math.min(cleanLines.length, remarkStart + 10)) : cleanLines.slice(Math.max(0, cleanLines.length - 6));
+      return {
+        bookingNo,
+        fclCount:fclMatch ? cleanNumberText(fclMatch[2]) : '',
+        bookingDateText:fclMatch ? fclMatch[1] : '',
+        etdText:etdIndex >= 0 ? cleanLines[etdIndex] : '',
+        bookingRemark:remarkLines.join(' / ')
+      };
+    }
+
+    function extractOutboundMetaFromText(text){
+      const lines = String(text || '').split(/\r?\n/).map(line => {
+        const cells = line.includes('\t') ? line.split(/\t+/) : parseCSVLine(line);
+        return cells.map(x => String(x || '').trim()).filter(Boolean).join(' ');
+      }).filter(Boolean);
+      return extractOutboundMetaFromLines(lines);
+    }
+
+    function headerIndexMapForOutbound(headerRow){
+      const normalized = (headerRow || []).map(x => String(x || '').trim().toLowerCase().replace(/\s+/g, ' '));
+      const find = (predicate) => normalized.findIndex(predicate);
+      return {
+        location:find(h => h === 'location'),
+        itemNumber:find(h => h === 'item number'),
+        qty:find(h => h === 'qty'),
+        qtyAllocate:find(h => h === 'qty allocate'),
+        uom:find(h => h === 'uom'),
+        inventoryStatus:find(h => h === 'inventory status'),
+        batch:find(h => h === 'batch'),
+        receiptDate:find(h => h === 'receipt date')
+      };
+    }
+
+    function rowFromOutboundAoa(row, map, meta={}, sourceSheet=''){
+      const getCell = (key) => map[key] >= 0 ? String(row[map[key]] ?? '').trim() : '';
+      const location = normalizeInventoryLocationText(getCell('location'));
+      const productName = getCell('itemNumber');
+      const qty = cleanNumberText(getCell('qty'));
+      const allocateText = getCell('qtyAllocate');
+      const allocations = parseQtyAllocateText(allocateText);
+      const uom = getCell('uom');
+      const inventoryStatus = getCell('inventoryStatus');
+      const batchCell = getCell('batch');
+      if(!location || !productName || !num(qty) || !allocations.length) return [];
+      const packType = /JB|850/i.test(uom) ? 'JB' : (/PP|25/i.test(uom) ? 'PP' : '');
+      if(!packType || /no\s*print/i.test(batchCell)) return [];
+      const factor = packType === 'JB' ? 850 : 25;
+      const { batchNo, tankCode } = splitBatchTankText(batchCell);
+      return allocations.map(item => {
+        const usedNumber = num(item.qty);
+        return {
+          tripNo:item.round,
+          productName,
+          batchNo,
+          tankCode:normalizedTank(tankCode),
+          bags:item.qty,
+          kg:usedNumber * factor,
+          pallets:'',
+          packType,
+          remark:[meta.etdText, `Allocate: ${item.round}(${item.qty})`, `Qty ต้นทาง: ${qty}`].filter(Boolean).join(' / '),
+          location,
+          bookingNo:meta.bookingNo || '',
+          fclCount:meta.fclCount || '',
+          bookingDateText:meta.bookingDateText || '',
+          allocateText:`${item.round}(${item.qty})`,
+          exportRound:item.round,
+          sourceQty:qty,
+          inventoryStatus,
+          uomRaw:uom,
+          batchRaw:batchCell,
+          etdText:meta.etdText || '',
+          sourceSheet,
+          bookingRemark:meta.bookingRemark || ''
+        };
+      });
+    }
+
+    function parseOutboundWorkbook(workbook){
+      const rows = [];
+      for(const sheetName of workbook.SheetNames || []){
+        const ws = workbook.Sheets[sheetName];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
+        const headerIndex = (aoa || []).findIndex(row => {
+          const joined = (row || []).map(x => String(x || '').trim().toLowerCase()).join('|');
+          return joined.includes('item number') && joined.includes('qty allocate') && joined.includes('inventory status');
+        });
+        if(headerIndex < 0) continue;
+        const meta = extractOutboundMetaFromLines(nonEmptyFirstCellLinesFromAoa(aoa));
+        const map = headerIndexMapForOutbound(aoa[headerIndex]);
+        if(map.location < 0 || map.itemNumber < 0 || map.qtyAllocate < 0 || map.uom < 0 || map.batch < 0) continue;
+        for(let r = headerIndex + 1; r < aoa.length; r++){
+          rows.push(...rowFromOutboundAoa(aoa[r], map, meta, sheetName));
+        }
+      }
+      return rows.sort((a,b) => {
+        const bookingCompare = String(a.bookingNo || '').localeCompare(String(b.bookingNo || ''), 'th', { numeric:true });
+        if(bookingCompare) return bookingCompare;
+        const tripDiff = num(a.tripNo) - num(b.tripNo);
+        if(tripDiff) return tripDiff;
+        return String(a.productName || '').localeCompare(String(b.productName || ''), 'th', { numeric:true });
+      });
+    }
+
+    async function importOutboundExcelFile(file){
+      if(!file) return false;
+      if(!ensureExcelLibrary()) return false;
+      if(currentPage !== OUTBOUND_PAGE){
+        currentPage = OUTBOUND_PAGE;
+        localStorage.setItem("knsTransportPage", currentPage);
+        rowsCache = [];
+        applyPageUI();
+        if(dateInput?.value) listenDate(dateInput.value);
+      }
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type:'array' });
+      const rows = parseOutboundWorkbook(workbook);
+      if(!rows.length){
+        alert('ไม่พบงานโหลดจาก Excel: ต้องมี Qty Allocate เช่น 1(740), UOM เป็น PP/JB และ Batch ต้องไม่ใช่ No Print');
+        return false;
+      }
+      for(const row of rows){
+        await addRow(row);
+      }
+      await Promise.all(Array.from(new Set(rows.map(r => String(r.productName || '').trim()).filter(Boolean))).map(saveProductOption));
+      alert(`นำเข้า Excel หน้า “ส่งออก” เรียบร้อย ${rows.length} แถว / ${new Set(rows.map(r => r.bookingNo).filter(Boolean)).size} Booking`);
+      return true;
+    }
+
     function parseTransportText(text){
       const raw = String(text ?? "").replace(/\u00a0/g, " ").trim();
       if(!raw) return [];
       const rows = [];
       let carryTripNo = "";
-      let currentBookingNo = "";
+      const outboundMeta = currentPage === OUTBOUND_PAGE ? extractOutboundMetaFromText(raw) : {};
+      let currentBookingNo = outboundMeta.bookingNo || "";
 
       // แบบคัดลอกจาก Excel / Google Sheets จะคั่นคอลัมน์ด้วย Tab และขึ้นบรรทัดใหม่เป็นรายแถว
       const lines = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
@@ -3628,13 +3988,23 @@
           location: ""
         });
       }
+      if(currentPage === OUTBOUND_PAGE && rows.length){
+        for(const row of rows){
+          if(!row.bookingNo && outboundMeta.bookingNo) row.bookingNo = outboundMeta.bookingNo;
+          if(!row.fclCount && outboundMeta.fclCount) row.fclCount = outboundMeta.fclCount;
+          if(!row.bookingDateText && outboundMeta.bookingDateText) row.bookingDateText = outboundMeta.bookingDateText;
+          if(!row.etdText && outboundMeta.etdText) row.etdText = outboundMeta.etdText;
+          if(!row.bookingRemark && outboundMeta.bookingRemark) row.bookingRemark = outboundMeta.bookingRemark;
+          if(row.etdText && !String(row.remark || '').includes(row.etdText)) row.remark = [row.etdText, row.remark].filter(Boolean).join(' / ');
+        }
+      }
       return rows;
     }
 
     async function importCSV(text){
       const rows = parseTransportText(text);
       if(!rows.length){
-        alert("อ่านข้อมูลนำเข้าไม่ได้ กรุณาวางจาก Excel แบบคั่นด้วย Tab หรือเรียงเป็น No, Product, Batch, Tank, Bag, Kg, Pallet, Remark หรือแบบ Location, Item Number, Qty, UOM, Batch");
+        alert("อ่านข้อมูลนำเข้าไม่ได้ กรุณาวางจาก Excel แบบคั่นด้วย Tab หรือแนบไฟล์ Excel สำหรับหน้า ‘ส่งออก’ โดยต้องมี Location, Item Number, Qty Allocate, UOM, Inventory Status, Batch");
         return;
       }
       for(const row of rows){
@@ -3783,6 +4153,16 @@
     $("importBtn").addEventListener("click", () => $("importDialog").showModal());
     $("cancelImportBtn").addEventListener("click", () => $("importDialog").close());
     $("confirmImportBtn").addEventListener("click", async () => {
+      const excelFile = $("excelInput")?.files?.[0];
+      if(excelFile){
+        const ok = await importOutboundExcelFile(excelFile);
+        if(ok){
+          $("excelInput").value = "";
+          $("csvInput").value = "";
+          $("importDialog").close();
+        }
+        return;
+      }
       await importCSV($("csvInput").value);
       $("csvInput").value = "";
       $("importDialog").close();
