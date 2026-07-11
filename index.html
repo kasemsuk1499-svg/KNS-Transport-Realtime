@@ -3776,11 +3776,16 @@
     function parseWeeklyOutboundPlanObjects(objects, fileName='', side=''){
       const records = [];
       for(const obj of objects || []){
+        const krtPlanStatus = String(getCSVField(obj, ['KRT Plan Status']) || '').trim();
+        const stpPlan = String(getCSVField(obj, ['STP Plan']) || '').trim();
+        // ถ้าสถานะแผนฝั่ง KRT หรือ STP มีคำว่า Cancel ให้ตัดแถวนั้นออก ไม่ดึงเข้า Weekly Outbound
+        if(/CANCEL/i.test(krtPlanStatus) || /CANCEL/i.test(stpPlan)) continue;
+
         const loadText = getCSVField(obj, ['Load']);
         const loadNormalized = String(loadText || '').toUpperCase().replace(/\s+/g, ' ');
         // ดึงเฉพาะงาน KNS เท่านั้น และถ้าช่อง Load มีคำว่า STP ให้ตัดออกเลยตามไฟล์ STP1
         if(!/KNS/.test(loadNormalized)) continue;
-        if(/STP/.test(loadNormalized)) continue;
+        if(/\bSTP\b/.test(loadNormalized)) continue;
 
         const productRaw = getCSVField(obj, ['Product']);
         const productName = normalizeOutboundProductDisplay(productRaw);
