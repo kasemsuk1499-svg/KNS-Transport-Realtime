@@ -3807,9 +3807,9 @@
       return (mt * 1000) / factor / containerCount;
     }
 
-    function parseWeeklyOutboundPlanObjects(objects, fileName='', side=''){
+    function parseWeeklyOutboundPlanObjects(objects, fileName='', side='', sourceScope=''){
       const records = [];
-      for(const obj of objects || []){
+      for(const [objectIndex, obj] of Array.from(objects || []).entries()){
         const krtPlanStatus = String(getCSVField(obj, ['KRT Plan Status']) || '').trim();
         const stpPlan = String(getCSVField(obj, ['STP Plan']) || '').trim();
         // ถ้าสถานะแผนฝั่ง KRT หรือ STP มีคำว่า Cancel ให้ตัดแถวนั้นออก ไม่ดึงเข้า Weekly Outbound
@@ -3837,11 +3837,26 @@
         const etd = String(getCSVField(obj, ['ETD'])).replace(/\s+/g, ' ').trim();
         const topic = String(getCSVField(obj, ['ชื่อเรื่อง', 'Subject'])).trim();
 
+        // ถ้ามีหลายวันในเซลล์เดียว เช่น 16/07/2026 - 3 FCL และ 17/07/2026 - 4 FCL
+        // ต้องรวมเป็น 7 FCL ก่อน แล้วใช้ Quantity (MT) หารด้วย 7 ตู้เพียงครั้งเดียว
+        // หลังคำนวณเสร็จจึงแยกกลับเป็น 3 ตู้และ 4 ตู้ตามวัน โดยใช้ Remark เดียวกันทั้งสองวัน
+        const totalFclInSourceRow = dateFcls.reduce((sum, item) => sum + num(item.fcl), 0);
+        const totalMTInSourceRow = sumMultilineNumericCell(quantityMT);
+        const sharedQtyPerContainer = weeklyQtyPerContainerFromMT(totalMTInSourceRow, type, totalFclInSourceRow);
+        const sharedRemark = weeklyOutboundLoadRemark(type, sharedQtyPerContainer);
+        const groupScope = sourceScope || fileName || side || 'PLAN';
+        const planGroupKey = [
+          groupScope,
+          objectIndex,
+          normalizeWeeklyOutboundProductKey(productName),
+          type,
+          booking,
+          dateFcls.map(item => `${item.date}:${formatWeeklyQty(item.fcl)}`).join(',')
+        ].join('|');
+
         for(const item of dateFcls){
-          // ช่อง Original Plan Q'ty ใน Weekly Outbound ต้องเป็น "จำนวนตู้ของวันนั้น"
-          // จึงใช้ค่า x จาก dd/mm/yyyy - x Fcl โดยตรง ส่วนจำนวนถุง/ตู้เอาไว้ทำ Remark เท่านั้น
+          // ช่อง Original Plan Q'ty ยังคงแยกเป็นจำนวนตู้ของแต่ละวันตามเดิม
           const fcl = item.fcl;
-          const qtyPerContainer = weeklyQtyPerContainerFromMT(quantityMT, type, fcl);
           if(!fcl) continue;
           records.push({
             date:item.date,
@@ -3850,15 +3865,16 @@
             type,
             qty:fcl,
             fclCount:fcl,
-            // เก็บ MT ต้นทางไว้ด้วย เพื่อให้ชื่อแป้งเดียวกันจากไฟล์ STP + PTR
-            // ถูกรวม MT และจำนวนตู้ก่อน แล้วจึงคำนวณจำนวนถุงต่อตู้อีกครั้ง
-            quantityMT:sumMultilineNumericCell(quantityMT),
-            qtyPerContainer,
+            quantityMT:totalMTInSourceRow,
+            planGroupKey,
+            groupQuantityMT:totalMTInSourceRow,
+            groupTotalFcl:totalFclInSourceRow,
+            qtyPerContainer:sharedQtyPerContainer,
             booking,
             source:'FILE',
             side,
             sourceFile:fileName,
-            remark:weeklyOutboundLoadRemark(type, qtyPerContainer),
+            remark:sharedRemark,
             detailRemark:[booking ? `Booking: ${booking}` : '', etd, topic, side ? side : '', fileName ? `จากไฟล์: ${fileName}` : ''].filter(Boolean).join(' / ')
           });
         }
@@ -3867,7 +3883,7 @@
     }
 
     function parseWeeklyOutboundPlanCSV(text, fileName='', side=''){
-      return parseWeeklyOutboundPlanObjects(csvObjectsFromText(text), fileName, side);
+      return parseWeeklyOutboundPlanObjects(csvObjectsFromText(text), fileName, side, `CSV:${fileName || side || 'PLAN'}`);
     }
 
     function sheetObjectsFromAoa(aoa){
@@ -3893,7 +3909,12 @@
         const ws = workbook.Sheets[sheetName];
         const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
         const objects = sheetObjectsFromAoa(aoa);
-        records.push(...parseWeeklyOutboundPlanObjects(objects, fileName || sheetName, side));
+        records.push(...parseWeeklyOutboundPlanObjects(
+          objects,
+          fileName || sheetName,
+          side,
+          `XLSX:${fileName || 'PLAN'}:${sheetName}`
+        ));
       }
       return records;
     }
@@ -4109,6 +4130,133 @@
       return records;
     }
 
+    function buildWeeklyOutboundPlanDailyRecords(planRecords){
+      // ขั้นแรกคืน records ที่ถูกแยกวันกลับมาเป็น "แถวต้นทาง" ก่อน
+      // เพื่อไม่ให้ Quantity (MT) ถูกนับซ้ำตามจำนวนวันที่อยู่ในเซลล์เดียวกัน
+      const sourceGroups = new Map();
+      let fallbackIndex = 0;
+
+      for(const rec of planRecords || []){
+        const productKey = normalizeWeeklyOutboundProductKey(rec.productName);
+        const type = normalizePackType(rec.type) || rec.type || '';
+        if(!productKey || !rec.date || !type) continue;
+
+        const sourceKey = String(rec.planGroupKey || `FALLBACK|${fallbackIndex++}|${rec.date}|${productKey}|${type}`);
+        if(!sourceGroups.has(sourceKey)){
+          sourceGroups.set(sourceKey, {
+            sourceKey,
+            productKey,
+            productName:normalizeOutboundProductDisplay(rec.productName),
+            refName:normalizeOutboundProductDisplay(rec.refName || rec.productName),
+            type,
+            quantityMT:num(rec.groupQuantityMT ?? rec.quantityMT),
+            dates:new Map(),
+            months:new Set(),
+            remarks:new Set(),
+            details:new Set(),
+            files:new Set(),
+            sides:new Set()
+          });
+        }
+
+        const group = sourceGroups.get(sourceKey);
+        group.dates.set(rec.date, num(group.dates.get(rec.date)) + num(rec.qty || rec.fclCount));
+        group.months.add(String(rec.date).slice(0,7));
+        if(rec.remark) group.remarks.add(rec.remark);
+        if(rec.detailRemark) group.details.add(rec.detailRemark);
+        if(rec.sourceFile) group.files.add(rec.sourceFile);
+        if(rec.side) group.sides.add(rec.side);
+      }
+
+      const groups = Array.from(sourceGroups.values());
+      const parent = groups.map((_, i) => i);
+      const findRoot = (i) => {
+        while(parent[i] !== i){
+          parent[i] = parent[parent[i]];
+          i = parent[i];
+        }
+        return i;
+      };
+      const union = (a, b) => {
+        const ra = findRoot(a);
+        const rb = findRoot(b);
+        if(ra !== rb) parent[rb] = ra;
+      };
+      const setsOverlap = (a, b) => {
+        for(const value of a){ if(b.has(value)) return true; }
+        return false;
+      };
+
+      // ชื่อแป้งและชนิดเดียวกันในไฟล์ STP/PTR ของเดือนเดียวกัน
+      // ให้รวม Quantity (MT) และ FCL ทุกวันเข้าด้วยกันก่อนคำนวณ Remark
+      for(let i=0; i<groups.length; i++){
+        for(let j=i+1; j<groups.length; j++){
+          if(groups[i].productKey !== groups[j].productKey) continue;
+          if(groups[i].type !== groups[j].type) continue;
+          if(!setsOverlap(groups[i].months, groups[j].months)) continue;
+          union(i, j);
+        }
+      }
+
+      const components = new Map();
+      for(let i=0; i<groups.length; i++){
+        const root = findRoot(i);
+        const group = groups[i];
+        if(!components.has(root)){
+          components.set(root, {
+            productKey:group.productKey,
+            productName:group.productName,
+            refName:group.refName,
+            type:group.type,
+            totalMT:0,
+            dates:new Map(),
+            remarks:new Set(),
+            details:new Set(),
+            files:new Set(),
+            sides:new Set()
+          });
+        }
+        const component = components.get(root);
+        component.totalMT += num(group.quantityMT);
+        for(const [date, fcl] of group.dates.entries()){
+          component.dates.set(date, num(component.dates.get(date)) + num(fcl));
+        }
+        for(const value of group.remarks) component.remarks.add(value);
+        for(const value of group.details) component.details.add(value);
+        for(const value of group.files) component.files.add(value);
+        for(const value of group.sides) component.sides.add(value);
+        if(!component.productName) component.productName = group.productName;
+        if(!component.refName) component.refName = group.refName;
+      }
+
+      const dailyRecords = [];
+      for(const component of components.values()){
+        const totalFcl = Array.from(component.dates.values()).reduce((sum, value) => sum + num(value), 0);
+        const qtyPerContainer = weeklyQtyPerContainerFromMT(component.totalMT, component.type, totalFcl);
+        const sharedRemark = weeklyOutboundLoadRemark(component.type, qtyPerContainer);
+        const sharedDetail = Array.from(component.details).filter(Boolean).join(' / ');
+
+        for(const [date, fcl] of component.dates.entries()){
+          if(!fcl) continue;
+          dailyRecords.push({
+            date,
+            productName:component.productName,
+            refName:component.refName || component.productName,
+            type:component.type,
+            qty:fcl,
+            fclCount:fcl,
+            quantityMT:component.totalMT,
+            totalFcl,
+            qtyPerContainer,
+            source:'FILE',
+            remark:sharedRemark,
+            detailRemark:sharedDetail
+          });
+        }
+      }
+      return dailyRecords;
+    }
+
     function combineWeeklyOutboundRecords(webRecords, planRecords){
       // ถ้าวันใดมีข้อมูลที่บันทึกบนหน้าเว็บแล้ว ให้ถือว่าข้อมูลหน้าเว็บเป็นข้อมูลจริงของทั้งวัน
       // และไม่ดึงข้อมูลวันเดียวกันจากไฟล์ STP/PTR มาปะปนหรือบวกซ้ำอีก
@@ -4117,6 +4265,10 @@
           .map(rec => String(rec?.date || '').trim())
           .filter(Boolean)
       );
+
+      // ฝั่งไฟล์ต้องรวม MT + FCL ข้ามหลายวัน/ข้าม STP-PTR ให้เสร็จก่อน
+      // จากนั้นจึงค่อยแยกจำนวนตู้กลับไปลงแต่ละวันพร้อม Remark เดียวกัน
+      const normalizedPlanRecords = buildWeeklyOutboundPlanDailyRecords(planRecords);
 
       const map = new Map();
       const ensure = (rec) => {
@@ -4133,7 +4285,6 @@
             type,
             webQty:0,
             planQty:0,
-            planMT:0,
             webRemarks:new Set(),
             planRemarks:new Set(),
             webDetails:new Set(),
@@ -4145,19 +4296,17 @@
 
       const mergeQty = (oldQty, newQty) => num(oldQty) + num(newQty);
 
-      for(const rec of planRecords || []){
+      for(const rec of normalizedPlanRecords){
         // มีข้อมูลบนเว็บในวันนั้นแล้ว: ข้ามข้อมูลจากไฟล์ทั้งวัน
         if(webDates.has(String(rec?.date || '').trim())) continue;
         const item = ensure(rec);
         if(!item) continue;
         item.planQty = mergeQty(item.planQty, rec.qty);
-        // ชื่อแป้งเดียวกันในวันเดียวกันจากทั้งไฟล์ STP และ PTR
-        // ให้รวม Quantity (MT) ก่อน รวม FCL ก่อน แล้วค่อยคำนวณถุงต่อตู้
-        item.planMT = mergeQty(item.planMT, rec.quantityMT);
         if(rec.remark) item.planRemarks.add(rec.remark);
         if(rec.detailRemark) item.planDetails.add(rec.detailRemark);
         if(!item.productName) item.productName = normalizeOutboundProductDisplay(rec.productName);
       }
+
       for(const rec of webRecords || []){
         const item = ensure(rec);
         if(!item) continue;
@@ -4172,24 +4321,15 @@
       return Array.from(map.values()).map(item => {
         const hasWeb = item.webQty > 0;
         const qty = hasWeb ? item.webQty : item.planQty;
-
-        // ฝั่งไฟล์: รวม MT ของชื่อแป้งเดียวกันจาก STP + PTR และรวมจำนวน FCL ก่อน
-        // ตัวอย่าง 30 MT + 50 MT = 80 MT แล้วคำนวณ 80 MT / FCL รวม
-        const combinedPlanQtyPerContainer = hasWeb
-          ? 0
-          : weeklyQtyPerContainerFromMT(item.planMT, item.type, item.planQty);
-
         const webFallbackRemark = weeklyOutboundLoadRemark(item.type, qty);
-        const combinedPlanRemark = weeklyOutboundLoadRemark(item.type, combinedPlanQtyPerContainer);
+        const planRemark = Array.from(item.planRemarks)[0] || weeklyOutboundLoadRemark(item.type, qty);
         return {
           ...item,
           qty,
-          qtyPerContainer:hasWeb ? 0 : combinedPlanQtyPerContainer,
           source:hasWeb ? 'WEB' : 'FILE',
-          // ถ้าใช้ข้อมูลจากไฟล์ ต้องใช้ Remark ที่คำนวณใหม่จากยอด MT และ FCL ที่รวมแล้ว
           remark:hasWeb
             ? (item.type === 'JB' ? webFallbackRemark : (Array.from(item.webRemarks)[0] || webFallbackRemark))
-            : combinedPlanRemark
+            : planRemark
         };
       }).filter(item => item.qty > 0).sort((a,b) => {
         const dateDiff = String(a.date).localeCompare(String(b.date));
