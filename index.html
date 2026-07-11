@@ -3850,6 +3850,9 @@
             type,
             qty:fcl,
             fclCount:fcl,
+            // เก็บ MT ต้นทางไว้ด้วย เพื่อให้ชื่อแป้งเดียวกันจากไฟล์ STP + PTR
+            // ถูกรวม MT และจำนวนตู้ก่อน แล้วจึงคำนวณจำนวนถุงต่อตู้อีกครั้ง
+            quantityMT:sumMultilineNumericCell(quantityMT),
             qtyPerContainer,
             booking,
             source:'FILE',
@@ -4130,6 +4133,7 @@
             type,
             webQty:0,
             planQty:0,
+            planMT:0,
             webRemarks:new Set(),
             planRemarks:new Set(),
             webDetails:new Set(),
@@ -4147,6 +4151,9 @@
         const item = ensure(rec);
         if(!item) continue;
         item.planQty = mergeQty(item.planQty, rec.qty);
+        // ชื่อแป้งเดียวกันในวันเดียวกันจากทั้งไฟล์ STP และ PTR
+        // ให้รวม Quantity (MT) ก่อน รวม FCL ก่อน แล้วค่อยคำนวณถุงต่อตู้
+        item.planMT = mergeQty(item.planMT, rec.quantityMT);
         if(rec.remark) item.planRemarks.add(rec.remark);
         if(rec.detailRemark) item.planDetails.add(rec.detailRemark);
         if(!item.productName) item.productName = normalizeOutboundProductDisplay(rec.productName);
@@ -4165,13 +4172,24 @@
       return Array.from(map.values()).map(item => {
         const hasWeb = item.webQty > 0;
         const qty = hasWeb ? item.webQty : item.planQty;
-        const remarkSet = hasWeb ? item.webRemarks : item.planRemarks;
-        const fallbackRemark = weeklyOutboundLoadRemark(item.type, qty);
+
+        // ฝั่งไฟล์: รวม MT ของชื่อแป้งเดียวกันจาก STP + PTR และรวมจำนวน FCL ก่อน
+        // ตัวอย่าง 30 MT + 50 MT = 80 MT แล้วคำนวณ 80 MT / FCL รวม
+        const combinedPlanQtyPerContainer = hasWeb
+          ? 0
+          : weeklyQtyPerContainerFromMT(item.planMT, item.type, item.planQty);
+
+        const webFallbackRemark = weeklyOutboundLoadRemark(item.type, qty);
+        const combinedPlanRemark = weeklyOutboundLoadRemark(item.type, combinedPlanQtyPerContainer);
         return {
           ...item,
           qty,
+          qtyPerContainer:hasWeb ? 0 : combinedPlanQtyPerContainer,
           source:hasWeb ? 'WEB' : 'FILE',
-          remark:item.type === 'JB' ? fallbackRemark : (Array.from(remarkSet)[0] || fallbackRemark)
+          // ถ้าใช้ข้อมูลจากไฟล์ ต้องใช้ Remark ที่คำนวณใหม่จากยอด MT และ FCL ที่รวมแล้ว
+          remark:hasWeb
+            ? (item.type === 'JB' ? webFallbackRemark : (Array.from(item.webRemarks)[0] || webFallbackRemark))
+            : combinedPlanRemark
         };
       }).filter(item => item.qty > 0).sort((a,b) => {
         const dateDiff = String(a.date).localeCompare(String(b.date));
