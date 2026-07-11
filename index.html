@@ -3750,6 +3750,38 @@
       return null;
     }
 
+    function sumMultilineNumericCell(value){
+      // บางไฟล์ใส่ตัวเลขหลายค่าไว้ในเซลล์เดียวโดยขึ้นบรรทัดใหม่ เช่น 30\n50
+      // ต้องรวมเป็น 80 ก่อน แล้วจึงนำไปคำนวณจำนวนถุงต่อตู้
+      if(Array.isArray(value)){
+        return value.reduce((sum, item) => sum + sumMultilineNumericCell(item), 0);
+      }
+      if(typeof value === 'number'){
+        return Number.isFinite(value) ? value : 0;
+      }
+
+      const text = String(value ?? '').trim();
+      if(!text) return 0;
+
+      const parts = text
+        .split(/(?:\r?\n|\r|;|\|)+/g)
+        .map(part => part.trim())
+        .filter(Boolean);
+
+      // เซลล์ปกติที่มีค่าเดียว ยังคงใช้ num() เพื่อรองรับเลขคั่นหลักพัน เช่น 30,000
+      if(parts.length <= 1) return num(text);
+
+      return parts.reduce((sum, part) => {
+        const cleaned = part.replace(/,/g, '').trim();
+        const direct = Number(cleaned);
+        if(Number.isFinite(direct)) return sum + direct;
+
+        // รองรับกรณีในแต่ละบรรทัดมีหน่วยติดมาด้วย เช่น 30 MT
+        const match = cleaned.match(/[-+]?\d+(?:\.\d+)?/);
+        return sum + (match ? Number(match[0]) : 0);
+      }, 0);
+    }
+
     function formatWeeklyQty(value){
       const n = Number(value || 0);
       if(!Number.isFinite(n)) return '';
@@ -3766,7 +3798,9 @@
     }
 
     function weeklyQtyPerContainerFromMT(quantityMT, type, fcl){
-      const mt = num(quantityMT);
+      // ถ้า Quantity (MT) มีหลายตัวเลขในเซลล์เดียว เช่น 30 และ 50 คนละบรรทัด
+      // ให้รวมเป็น 80 MT ก่อน แล้วค่อยคำนวณจำนวนถุงต่อตู้
+      const mt = sumMultilineNumericCell(quantityMT);
       const containerCount = num(fcl);
       const factor = type === 'JB' ? 850 : (type === 'PP' ? 25 : 0);
       if(!mt || !containerCount || !factor) return 0;
@@ -4073,6 +4107,14 @@
     }
 
     function combineWeeklyOutboundRecords(webRecords, planRecords){
+      // ถ้าวันใดมีข้อมูลที่บันทึกบนหน้าเว็บแล้ว ให้ถือว่าข้อมูลหน้าเว็บเป็นข้อมูลจริงของทั้งวัน
+      // และไม่ดึงข้อมูลวันเดียวกันจากไฟล์ STP/PTR มาปะปนหรือบวกซ้ำอีก
+      const webDates = new Set(
+        (webRecords || [])
+          .map(rec => String(rec?.date || '').trim())
+          .filter(Boolean)
+      );
+
       const map = new Map();
       const ensure = (rec) => {
         const productKey = normalizeWeeklyOutboundProductKey(rec.productName);
@@ -4100,6 +4142,8 @@
       const mergeQty = (oldQty, newQty) => num(oldQty) + num(newQty);
 
       for(const rec of planRecords || []){
+        // มีข้อมูลบนเว็บในวันนั้นแล้ว: ข้ามข้อมูลจากไฟล์ทั้งวัน
+        if(webDates.has(String(rec?.date || '').trim())) continue;
         const item = ensure(rec);
         if(!item) continue;
         item.planQty = mergeQty(item.planQty, rec.qty);
