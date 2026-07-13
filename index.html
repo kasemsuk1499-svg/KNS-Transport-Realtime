@@ -505,7 +505,10 @@
       display:flex;
       align-items:center;
       gap:6px;
-      white-space:nowrap;
+      flex:1 1 auto;
+      min-width:0;
+      white-space:normal;
+      line-height:1.25;
     }
     .todo-count{
       display:inline-flex;
@@ -522,13 +525,17 @@
       font-weight:700;
     }
     .todo-toggle{
-      min-height:28px;
-      padding:4px 8px;
+      flex:0 0 auto;
+      min-width:64px;
+      min-height:30px;
+      padding:4px 9px;
       border-radius:8px;
       box-shadow:none;
       background:#475467;
       color:#fff;
       font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
     }
     .todo-body{
       padding:10px;
@@ -1010,7 +1017,7 @@
     <aside class="todo-widget" id="todoWidget" aria-label="To Do List ประจำวัน">
       <div class="todo-head">
         <div class="todo-title">☑ To Do List รวม STP/PTR/ส่งออก <span class="todo-count" id="todoCount">0/0</span></div>
-        <button class="todo-toggle" id="todoToggleBtn" type="button">ย่อ</button>
+        <button class="todo-toggle" id="todoToggleBtn" type="button" aria-expanded="true">▼ ย่อ</button>
       </div>
       <div class="todo-body">
         <div class="todo-add">
@@ -3244,7 +3251,9 @@
         greenText:{ font:{bold:true, sz:10, color:{rgb:'00B050'}}, alignment:left, border },
         redText:{ font:{bold:true, sz:10, color:{rgb:'FF0000'}}, alignment:left, border },
         balanceDate:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'DDEBF7'}}, border },
-        redFill:{ font:{sz:10}, alignment:center, fill:{fgColor:{rgb:'FF0000'}}, border },
+        redFill:{ font:{sz:10, color:{rgb:'FFFFFF'}}, alignment:center, fill:{fgColor:{rgb:'FF0000'}}, border },
+        orangeFill:{ font:{bold:true, sz:10, color:{rgb:'9A3412'}}, alignment:center, fill:{fgColor:{rgb:'F4B183'}}, border },
+        orangeText:{ font:{bold:true, sz:10, color:{rgb:'9A3412'}}, alignment:center, fill:{fgColor:{rgb:'F4B183'}}, border },
         total:{ font:{bold:true, sz:10}, alignment:center, fill:{fgColor:{rgb:'FFF2CC'}}, border },
         blank:{ border }
       };
@@ -3568,23 +3577,44 @@
       const byDate = new Map();
       for(const row of monthRows){
         const key = row.date;
-        byDate.set(key, (byDate.get(key) || 0) + (num(row.kg) / 1000));
+        if(!key) continue;
+        const current = byDate.get(key) || { inboundTon:0, dataRows:0 };
+        current.inboundTon += num(row.kg) / 1000;
+        const hasInboundData = [
+          row.productName, row.batchNo, row.tankCode,
+          row.bags, row.kg, row.pallets
+        ].some(value => String(value ?? '').trim() !== '' && (typeof value !== 'number' || value !== 0));
+        if(hasInboundData) current.dataRows += 1;
+        byDate.set(key, current);
       }
 
       for(let day=1; day<=days; day++){
         const iso = `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const r = day + 1;
-        const isWeeklyLine = day % 7 === 0;
+        const dateInfo = byDate.get(iso);
+        const hasInbound = !!dateInfo && (dateInfo.dataRows > 0 || dateInfo.inboundTon > 0);
+        const isSunday = jsDateFromISO(iso).getDay() === 0;
         setCell(ws, r, 1, monthDateLabel(year, monthIndex, day), st.balanceDate);
-        if(isWeeklyLine){
+
+        // วันอาทิตย์ที่ไม่มีรับเข้า = แถบแดง
+        // ถ้าวันอาทิตย์มีข้อมูลรับเข้า ให้แสดงข้อมูลตามปกติและไม่ใส่แถบแดง
+        if(isSunday && !hasInbound){
           for(let c=2; c<=5; c++) setCell(ws, r, c, '', st.redFill);
-        }else{
-          const inbound = byDate.get(iso);
-          setCell(ws, r, 2, inbound ? Number(inbound.toFixed(1)) : '', st.number);
-          setCell(ws, r, 3, '', st.number);
-          setFormula(ws, r, 4, `IF(OR(C${r+1}<>",",D${r+1}<>","),C${r+1}-D${r+1},"")`.replace(/<>","/g,'<>""'), st.number);
-          setCell(ws, r, 5, '', st.text);
+          continue;
         }
+
+        // วันปกติที่ไม่มีข้อมูลรับเข้า = แถบส้ม พร้อมข้อความกำกับ
+        if(!hasInbound){
+          for(let c=2; c<=4; c++) setCell(ws, r, c, '', st.orangeFill);
+          setCell(ws, r, 5, 'ไม่รับเข้า', st.orangeText);
+          continue;
+        }
+
+        const inbound = dateInfo.inboundTon;
+        setCell(ws, r, 2, Number(inbound.toFixed(1)), st.number);
+        setCell(ws, r, 3, '', st.number);
+        setFormula(ws, r, 4, `IF(OR(C${r+1}<>",",D${r+1}<>","),C${r+1}-D${r+1},"")`.replace(/<>","/g,'<>""'), st.number);
+        setCell(ws, r, 5, '', st.text);
       }
 
       const totalRow = days + 2;
@@ -5011,7 +5041,8 @@
     todoToggleBtn.addEventListener("click", () => {
       todoWidget.classList.toggle("collapsed");
       const collapsed = todoWidget.classList.contains("collapsed");
-      todoToggleBtn.textContent = collapsed ? "ขยาย" : "ย่อ";
+      todoToggleBtn.textContent = collapsed ? "▲ ขยาย" : "▼ ย่อ";
+      todoToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       localStorage.setItem("knsTransportTodoCollapsed", collapsed ? "1" : "0");
     });
     todoLists.addEventListener("click", (e) => {
@@ -5105,7 +5136,11 @@
 
     if(localStorage.getItem("knsTransportTodoCollapsed") === "1"){
       todoWidget.classList.add("collapsed");
-      todoToggleBtn.textContent = "ขยาย";
+      todoToggleBtn.textContent = "▲ ขยาย";
+      todoToggleBtn.setAttribute("aria-expanded", "false");
+    }else{
+      todoToggleBtn.textContent = "▼ ย่อ";
+      todoToggleBtn.setAttribute("aria-expanded", "true");
     }
     if(localStorage.getItem("knsTransportEmptyLocationsCollapsed") === "1"){
       emptyLocationsWidget.classList.add("collapsed");
