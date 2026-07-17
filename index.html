@@ -918,22 +918,48 @@
       width:100%;
       background:#fff;
     }
+    /* หน้า “ส่งออก” — ล็อกความกว้างคอลัมน์สำคัญ ไม่ให้เบียดจนช่องตู้หาย */
+    .col-booking{min-width:130px;width:130px}
+    .col-container{min-width:96px;width:96px}
+    .col-fcl{min-width:112px;width:112px}
+    .col-status{min-width:170px}
+
+    .outbound-booking-cell{min-width:130px}
+    .outbound-container-cell{min-width:96px}
+    .outbound-fcl-cell{min-width:112px;padding:6px}
+
     .outbound-booking-cell input,
     .outbound-container-cell input{
       font-weight:900;
       color:#7c2d12;
     }
+    .outbound-container-cell input{
+      min-width:94px;
+      font-size:16px;
+      text-align:center;
+      padding-left:10px;
+      padding-right:10px;
+    }
     .outbound-fcl-chip{
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      min-width:46px;
-      padding:4px 8px;
+      min-width:82px;
+      padding:6px 10px;
       border-radius:999px;
       background:#ffedd5;
       border:1px solid #fb923c;
       font-weight:900;
       color:#7c2d12;
+      white-space:nowrap;
+    }
+    .outbound-fcl-note{
+      display:block;
+      margin-top:3px;
+      font-size:10px;
+      font-weight:700;
+      color:#9a5a10;
+      white-space:nowrap;
     }
     .outbound-alloc-cell input{
       font-weight:900;
@@ -943,7 +969,7 @@
       min-height:52px;
     }
     body[data-page="OUT"] .table-wrap table{
-      min-width:1680px;
+      min-width:1800px;
     }
     body:not([data-page="OUT"]) #exportWeeklyOutboundBtn,
     body:not([data-page="OUT"]) #setWeeklyOutboundStpBtn,
@@ -1988,8 +2014,8 @@
         tableHead.innerHTML = `
             <tr>
               <th class="col-booking">Booking</th>
-              <th class="col-trip">ตู้</th>
-              <th class="col-fcl">FCL</th>
+              <th class="col-container">ตู้ No.</th>
+              <th class="col-fcl">FCL<br><small>ต่อ Booking</small></th>
               <th class="col-location location">Location</th>
               <th class="col-product">Item Number</th>
               <th class="col-batch">Batch</th>
@@ -2117,7 +2143,10 @@
       const pallets = currentPage === OUTBOUND_PAGE
         ? new Set(rowsCache.map(r => String(r.bookingNo || '').trim()).filter(Boolean)).size
         : rowsCache.reduce((s,r)=>s+num(r.pallets),0);
-      $("totalTrips").textContent = fmt(uniqueTrips.size);
+      const tripTotal = currentPage === OUTBOUND_PAGE
+        ? Array.from(buildOutboundBookingFclCounts(rowsCache).values()).reduce((sum, count) => sum + num(count), 0)
+        : uniqueTrips.size;
+      $("totalTrips").textContent = fmt(tripTotal);
       $("totalBags").textContent = fmt(bags);
       $("totalKg").textContent = fmt(kg,2);
       $("totalPallets").textContent = fmt(pallets);
@@ -2383,8 +2412,44 @@
       </td>`;
     }
 
+    function outboundContainerValue(row){
+      return String(row?.tripNo || row?.exportRound || '').trim();
+    }
+
+    function outboundBookingKey(row){
+      const booking = String(row?.bookingNo || '').trim().toUpperCase();
+      // แถวที่ยังไม่มี Booking จะไม่ถูกรวมมั่วเป็น Booking เดียวกัน
+      return booking ? `BOOKING:${booking}` : `NO_BOOKING:${row?.id || row?.sortOrder || row?.createdAt || 'UNASSIGNED'}`;
+    }
+
+    function buildOutboundBookingFclCounts(rows){
+      const stats = new Map();
+      for(const row of rows || []){
+        const key = outboundBookingKey(row);
+        if(!stats.has(key)) stats.set(key, { rounds:new Set(), maxRound:0, fallbackFcl:0 });
+        const stat = stats.get(key);
+        const round = outboundContainerValue(row);
+        if(round){
+          stat.rounds.add(round);
+          const roundNumber = Number(round);
+          if(Number.isFinite(roundNumber) && roundNumber > stat.maxRound) stat.maxRound = roundNumber;
+        }
+        const storedFcl = num(row?.fclCount);
+        if(storedFcl > stat.fallbackFcl) stat.fallbackFcl = storedFcl;
+      }
+      const counts = new Map();
+      for(const [key, stat] of stats.entries()){
+        // ปกติ Qty Allocate จะแยกเลขตู้เป็น 1(...), 2(...), 3(...)
+        // จึงนับเลขตู้ไม่ซ้ำภายใน Booking เดียวกัน และใช้เลขลำดับสูงสุดกันกรณีมีเลขข้ามช่วง
+        const counted = stat.rounds.size ? Math.max(stat.rounds.size, stat.maxRound) : stat.fallbackFcl;
+        counts.set(key, counted || 0);
+      }
+      return counts;
+    }
+
     function renderOutboundRows(){
       const tankShadeClasses = buildTankShadeClasses(rowsCache);
+      const bookingFclCounts = buildOutboundBookingFclCounts(rowsCache);
       tbody.innerHTML = rowsCache.map((row, index) => {
         const prev = rowsCache[index - 1];
         const next = rowsCache[index + 1];
@@ -2401,13 +2466,21 @@
           isGroupEnd ? 'group-end' : '',
           tripStatusClass(row)
         ].filter(Boolean).join(' ');
-        const fclValue = row.fclCount ? `${row.fclCount} FCL` : '';
+        const bookingFcl = bookingFclCounts.get(outboundBookingKey(row)) || 0;
+        const fclValue = bookingFcl ? `${formatWeeklyQty(bookingFcl)} FCL` : '-';
+        const containerValue = outboundContainerValue(row);
+        const containerRow = containerValue && !String(row.tripNo ?? '').trim()
+          ? { ...row, tripNo:containerValue }
+          : row;
         const remarkValue = row.remark || [row.etdText, row.bookingRemark].filter(Boolean).join(' / ');
         return `
         <tr class="${classes}">
           <td class="outbound-booking-cell">${outboundInputCell(row,'bookingNo')}</td>
-          <td class="outbound-container-cell">${outboundInputCell(row,'tripNo','number')}</td>
-          <td><div class="outbound-fcl-chip">${escapeHtml(fclValue || '-')}</div>${outboundInputCell(row,'fclCount','number')}</td>
+          <td class="outbound-container-cell">${outboundInputCell(containerRow,'tripNo','text',{className:'outbound-container-input'})}</td>
+          <td class="outbound-fcl-cell" title="จำนวนตู้ทั้งหมดของ Booking ${escapeAttr(booking || '-')}">
+            <div class="outbound-fcl-chip">${escapeHtml(fclValue)}</div>
+            <span class="outbound-fcl-note">รวมของ Booking นี้</span>
+          </td>
           ${outboundLocationCell(row)}
           <td>${outboundInputCell(row,'productName')}</td>
           <td>${outboundInputCell(row,'batchNo')}</td>
@@ -2712,6 +2785,51 @@
     async function insertTripAfter(id){
       const row = rowsCache.find(r => r.id === id);
       if(!row) return;
+
+      // หน้า “ส่งออก” เลขตู้เริ่มนับใหม่ภายในแต่ละ Booking
+      // จึงห้ามเลื่อนเลขตู้ของ Booking อื่น และแถวใหม่ต้องติด Booking เดิมไปด้วย
+      if(currentPage === OUTBOUND_PAGE){
+        const bookingKey = outboundBookingKey(row);
+        const sameBookingRows = rowsCache.filter(r => outboundBookingKey(r) === bookingKey);
+        const currentTrip = num(outboundContainerValue(row));
+        const maxTrip = Math.max(0, ...sameBookingRows.map(r => num(outboundContainerValue(r))));
+        const baseTrip = currentTrip || maxTrip;
+        const updates = {};
+
+        for(const r of sameBookingRows){
+          const trip = num(outboundContainerValue(r));
+          if(trip > baseTrip){
+            const nextTrip = trip + 1;
+            updates[`${r.id}/tripNo`] = nextTrip;
+            if(String(r.exportRound || '').trim()) updates[`${r.id}/exportRound`] = String(nextTrip);
+            const allocateMatch = String(r.allocateText || '').match(/^\s*\d+\s*\(([^)]+)\)\s*$/);
+            if(allocateMatch) updates[`${r.id}/allocateText`] = `${nextTrip}(${allocateMatch[1]})`;
+            updates[`${r.id}/updatedAt`] = serverTimestamp();
+          }
+        }
+        if(Object.keys(updates).length) await update(rowsRootRef(), updates);
+
+        await addRow({
+          tripNo: baseTrip + 1,
+          bookingNo: row.bookingNo || "",
+          fclCount: "", // FCL จะแสดงผลจากจำนวนเลขตู้ของ Booking อัตโนมัติ
+          productName: "",
+          batchNo: "",
+          tankCode: "",
+          bags: "",
+          kg: "",
+          pallets: "",
+          packType: normalizePackType(row.packType),
+          remark: row.bookingRemark || row.remark || "ส่งออก",
+          location: "",
+          bookingDateText: row.bookingDateText || "",
+          etdText: row.etdText || "",
+          sourceSheet: row.sourceSheet || "",
+          bookingRemark: row.bookingRemark || ""
+        }, { sortOrder: nextDefaultSortOrder() });
+        return;
+      }
+
       const baseTrip = num(row.tripNo);
       const updates = {};
       for(const r of rowsCache){
