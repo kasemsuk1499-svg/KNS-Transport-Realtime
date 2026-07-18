@@ -972,13 +972,14 @@
       min-width:1800px;
     }
     body:not([data-page="OUT"]) #exportWeeklyOutboundBtn,
+    body:not([data-page="OUT"]) #setWeeklyOutboundTemplateBtn,
     body:not([data-page="OUT"]) #setWeeklyOutboundStpBtn,
     body:not([data-page="OUT"]) #setWeeklyOutboundPtrBtn,
     body:not([data-page="OUT"]) #weeklyOutboundPlanStatus{display:none}
     .weekly-outbound-status{
       display:inline-flex;
       align-items:center;
-      max-width:320px;
+      max-width:620px;
       min-height:34px;
       padding:6px 9px;
       border:1px solid #fed7aa;
@@ -1027,6 +1028,8 @@
         <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
         <button id="exportPlanExcelBtn" class="light">ส่งออก Excel ตามสีหน้าเว็บ</button>
         <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
+        <button id="setWeeklyOutboundTemplateBtn" class="light" type="button">ตั้งไฟล์ Weekly ต้นฉบับ</button>
+        <input id="weeklyOutboundTemplateInput" type="file" accept=".xlsx,.xls" style="display:none" />
         <button id="setWeeklyOutboundStpBtn" class="light" type="button">ตั้งไฟล์ STP เดือนนี้</button>
         <input id="weeklyOutboundStpInput" type="file" accept=".xlsx,.xls,.csv,text/csv" style="display:none" />
         <button id="setWeeklyOutboundPtrBtn" class="light" type="button">ตั้งไฟล์ PTR เดือนนี้</button>
@@ -1217,6 +1220,7 @@
     const totalBagsLabel = $("totalBagsLabel");
     const totalKgLabel = $("totalKgLabel");
     const totalPalletsLabel = $("totalPalletsLabel");
+    const weeklyOutboundTemplateInput = $("weeklyOutboundTemplateInput");
     const weeklyOutboundStpInput = $("weeklyOutboundStpInput");
     const weeklyOutboundPtrInput = $("weeklyOutboundPtrInput");
     const weeklyOutboundPlanStatus = $("weeklyOutboundPlanStatus");
@@ -4109,6 +4113,58 @@
       return records;
     }
 
+    function weeklyOutboundTemplateYear(date=currentDate){
+      const year = Number(String(date || todayLocal()).slice(0,4));
+      return year || new Date().getFullYear();
+    }
+
+    function weeklyOutboundTemplateFileRef(year=weeklyOutboundTemplateYear()){
+      return ref(db, `knsTransport/weeklyOutboundTemplates/${year}`);
+    }
+
+    async function saveWeeklyOutboundTemplateBuffer(year, buffer, name=''){
+      const safeBuffer = buffer instanceof ArrayBuffer
+        ? buffer
+        : (buffer?.buffer instanceof ArrayBuffer ? buffer.buffer.slice(buffer.byteOffset || 0, (buffer.byteOffset || 0) + buffer.byteLength) : null);
+      if(!safeBuffer) throw new Error('ไม่พบข้อมูลไฟล์ Weekly ต้นฉบับ');
+      const fileName = name || `Weekly Outbound Plan ${year}.xlsx`;
+      await set(weeklyOutboundTemplateFileRef(year), {
+        year,
+        name:fileName,
+        type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size:safeBuffer.byteLength || 0,
+        savedAt:Date.now(),
+        updatedAt:serverTimestamp(),
+        dataBase64:arrayBufferToBase64(safeBuffer)
+      });
+    }
+
+    async function saveWeeklyOutboundTemplateFile(file){
+      if(!file) return;
+      const year = weeklyOutboundTemplateYear();
+      const buffer = await file.arrayBuffer();
+      await saveWeeklyOutboundTemplateBuffer(year, buffer, file.name || `Weekly Outbound Plan ${year}.xlsx`);
+      await refreshWeeklyOutboundPlanStatus();
+      alert(`ตั้งไฟล์ Weekly ต้นฉบับปี ${year} เรียบร้อยแล้ว\n${file.name || ''}\n\nหลัง Export ระบบจะบันทึกไฟล์ที่อัปเดตแล้วไว้เป็นต้นฉบับของสัปดาห์ถัดไปอัตโนมัติ`);
+    }
+
+    async function getStoredWeeklyOutboundTemplateFile(year=weeklyOutboundTemplateYear()){
+      try{
+        const snap = await get(weeklyOutboundTemplateFileRef(year));
+        const raw = snap.val();
+        if(!raw?.dataBase64) return null;
+        return {
+          ...raw,
+          year,
+          fileName:raw.name || `Weekly Outbound Plan ${year}.xlsx`,
+          data:base64ToArrayBuffer(raw.dataBase64)
+        };
+      }catch(err){
+        console.error(err);
+        return null;
+      }
+    }
+
     function weeklyOutboundPlanMonthKey(date=currentDate){
       const base = date || todayLocal();
       return String(base).slice(0,7);
@@ -4215,14 +4271,19 @@
       }
       try{
         const monthKey = weeklyOutboundPlanMonthKey();
-        const stp = await getStoredWeeklyOutboundPlanFile('STP', monthKey);
-        const ptr = await getStoredWeeklyOutboundPlanFile('PTR', monthKey);
+        const year = weeklyOutboundTemplateYear();
+        const [template, stp, ptr] = await Promise.all([
+          getStoredWeeklyOutboundTemplateFile(year),
+          getStoredWeeklyOutboundPlanFile('STP', monthKey),
+          getStoredWeeklyOutboundPlanFile('PTR', monthKey)
+        ]);
+        const templateText = template ? `Weekly: ${template.name}` : 'Weekly: ยังไม่ตั้งไฟล์ต้นฉบับ';
         const stpText = stp ? `STP: ${stp.name}` : 'STP: ยังไม่ตั้งไฟล์';
         const ptrText = ptr ? `PTR: ${ptr.name}` : 'PTR: ยังไม่ตั้งไฟล์';
-        weeklyOutboundPlanStatus.textContent = `${monthKey} • ${stpText} • ${ptrText}`;
+        weeklyOutboundPlanStatus.textContent = `${year} • ${templateText} • ${monthKey} • ${stpText} • ${ptrText}`;
       }catch(err){
         console.error(err);
-        weeklyOutboundPlanStatus.textContent = 'อ่านสถานะไฟล์ Plan ไม่สำเร็จ';
+        weeklyOutboundPlanStatus.textContent = 'อ่านสถานะไฟล์ Weekly / Plan ไม่สำเร็จ';
       }
     }
 
@@ -4491,6 +4552,391 @@
       return qtyCols.slice().reverse().reduce((acc, col) => `IF(${col}${rowNumber}<>"",${col}${rowNumber},${acc})`, '0');
     }
 
+    function weeklyOutboundRevisionDate(date=currentDate){
+      const d = jsDateFromISO(date || todayLocal());
+      // ใช้วันเสาร์ล่าสุดเสมอ ป้องกันเปิดหน้าเว็บวันอื่นแล้วสร้าง Revise เป็นวันผิด
+      const daysSinceSaturday = (d.getDay() + 1) % 7;
+      d.setDate(d.getDate() - daysSinceSaturday);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function cloneExcelObject(value){
+      if(!value || typeof value !== 'object') return value;
+      try{ return JSON.parse(JSON.stringify(value)); }
+      catch(_){ return value; }
+    }
+
+    function weeklyOutboundSetValue(ws, row, col, value, type=null, styleSourceCell=null){
+      const addr = cellAddr(row, col);
+      const cell = ws[addr] || {};
+      if(!cell.s && styleSourceCell?.s) cell.s = cloneExcelObject(styleSourceCell.s);
+      if(!cell.z && styleSourceCell?.z) cell.z = styleSourceCell.z;
+      cell.v = value;
+      cell.t = type || (typeof value === 'number' ? 'n' : 's');
+      delete cell.f;
+      delete cell.w;
+      ws[addr] = cell;
+      return cell;
+    }
+
+    function weeklyOutboundSetFormula(ws, row, col, formula, styleSourceCell=null){
+      const addr = cellAddr(row, col);
+      const cell = ws[addr] || {};
+      if(!cell.s && styleSourceCell?.s) cell.s = cloneExcelObject(styleSourceCell.s);
+      if(!cell.z && styleSourceCell?.z) cell.z = styleSourceCell.z;
+      cell.t = 'n';
+      cell.f = formula;
+      delete cell.v;
+      delete cell.w;
+      ws[addr] = cell;
+      return cell;
+    }
+
+    function weeklyOutboundClearCell(ws, row, col){
+      const addr = cellAddr(row, col);
+      const cell = ws[addr];
+      if(!cell) return;
+      delete cell.v;
+      delete cell.f;
+      delete cell.w;
+      cell.t = 's';
+      ws[addr] = cell;
+    }
+
+    function weeklyOutboundCellDateISO(cell){
+      if(!cell || cell.v === null || cell.v === undefined || cell.v === '') return '';
+      const value = cell.v;
+      if(value instanceof Date && !Number.isNaN(value.getTime())){
+        return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
+      }
+      if(typeof value === 'number' && XLSX?.SSF?.parse_date_code){
+        const parsed = XLSX.SSF.parse_date_code(value);
+        if(parsed?.y && parsed?.m && parsed?.d){
+          return `${parsed.y}-${String(parsed.m).padStart(2,'0')}-${String(parsed.d).padStart(2,'0')}`;
+        }
+      }
+      const text = String(value).trim();
+      let match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+      if(match) return `${match[1]}-${String(Number(match[2])).padStart(2,'0')}-${String(Number(match[3])).padStart(2,'0')}`;
+      match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+      if(match) return isoFromDMYText(match[1], match[2], match[3]);
+      match = text.match(/^(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{2,4})$/);
+      if(match){
+        const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const month = monthNames.indexOf(match[2].slice(0,3).toUpperCase()) + 1;
+        if(month) return isoFromDMYText(match[1], month, match[3]);
+      }
+      const parsedTime = Date.parse(text);
+      if(!Number.isNaN(parsedTime)){
+        const d = new Date(parsedTime);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
+      return '';
+    }
+
+    function weeklyOutboundTemplateLayout(ws){
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:AB1');
+      let planHeaderRow = -1;
+      for(let r=range.s.r; r<=Math.min(range.e.r, 20) && planHeaderRow < 0; r++){
+        for(let c=range.s.c; c<=Math.min(range.e.c, 22); c++){
+          const text = String(ws[cellAddr(r,c)]?.v ?? '').trim();
+          if(/Original\s*Plan/i.test(text)){
+            planHeaderRow = r;
+            break;
+          }
+        }
+      }
+      if(planHeaderRow < 1) throw new Error('ไม่พบหัวตาราง Original Plan / Revise ในชีท Weekly ต้นฉบับ');
+      return {
+        planHeaderRow,
+        dateRow:planHeaderRow - 1,
+        tableHeaderRow:planHeaderRow + 1,
+        firstDataRow:planHeaderRow + 2,
+        qtyStartCol:6,
+        qtyEndCol:22,
+        actualCol:23,
+        jbCol:24,
+        ppCol:25,
+        totalCol:26,
+        statusCol:27
+      };
+    }
+
+    function findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex){
+      const monthCode = MONTH_SHORT_EN[monthIndex].slice(0,3).toUpperCase();
+      const exact = (workbook.SheetNames || []).find(name => {
+        const normalized = String(name).toUpperCase().replace(/\s+/g, ' ').trim();
+        return normalized === `${monthCode} ${year}`;
+      });
+      if(exact) return exact;
+      return (workbook.SheetNames || []).find(name => {
+        const normalized = String(name).toUpperCase();
+        return normalized.includes(monthCode) && normalized.includes(String(year));
+      }) || '';
+    }
+
+    function weeklyOutboundTargetRevisionColumn(ws, layout, revisionDate){
+      let targetCol = -1;
+      let firstEmptyCol = -1;
+      for(let c=layout.qtyStartCol; c<=layout.qtyEndCol; c++){
+        const dateCell = ws[cellAddr(layout.dateRow, c)];
+        const cellISO = weeklyOutboundCellDateISO(dateCell);
+        if(cellISO === revisionDate){
+          targetCol = c;
+          break;
+        }
+        if(firstEmptyCol < 0 && !cellISO && String(dateCell?.v ?? '').trim() === '') firstEmptyCol = c;
+      }
+      if(targetCol < 0) targetCol = firstEmptyCol;
+      if(targetCol < 0) throw new Error('คอลัมน์ Revise เต็มแล้ว (Revise 1–16)');
+
+      const previousDateCell = ws[cellAddr(layout.dateRow, Math.max(layout.qtyStartCol, targetCol - 1))];
+      const dateCell = weeklyOutboundSetValue(
+        ws,
+        layout.dateRow,
+        targetCol,
+        excelSerialFromDate(jsDateFromISO(revisionDate)),
+        'n',
+        previousDateCell
+      );
+      dateCell.z = dateCell.z || previousDateCell?.z || 'd-mmm-yy';
+
+      const headerCell = ws[cellAddr(layout.planHeaderRow, targetCol)];
+      const headerText = targetCol === layout.qtyStartCol ? "Original Plan Q'ty" : `Revise ${targetCol - layout.qtyStartCol}`;
+      weeklyOutboundSetValue(ws, layout.planHeaderRow, targetCol, headerText, 's', headerCell || ws[cellAddr(layout.planHeaderRow, targetCol - 1)]);
+      return targetCol;
+    }
+
+    function weeklyOutboundFindDayBlocks(ws, layout){
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:AB1');
+      const starts = [];
+      for(let r=layout.firstDataRow; r<=range.e.r; r++){
+        const iso = weeklyOutboundCellDateISO(ws[cellAddr(r, 1)]);
+        if(iso) starts.push({ start:r, date:iso });
+      }
+      const merges = ws['!merges'] || [];
+      return starts.map((item, index) => {
+        const dateMerge = merges.find(m => m.s.r === item.start && m.s.c === 1 && m.e.c === 1);
+        const dayMerge = merges.find(m => m.s.r === item.start && m.s.c === 0 && m.e.c === 0);
+        const mergedEnd = Math.max(dateMerge?.e?.r ?? -1, dayMerge?.e?.r ?? -1);
+        const nextStart = starts[index + 1]?.start;
+        const fallbackEnd = nextStart !== undefined ? nextStart - 1 : Math.min(range.e.r, item.start + 10);
+        return { ...item, end:mergedEnd >= item.start ? mergedEnd : fallbackEnd };
+      });
+    }
+
+    function weeklyOutboundInsertRows(ws, insertAt, count, styleSourceRow){
+      if(count <= 0) return;
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:AB1');
+      for(let r=range.e.r; r>=insertAt; r--){
+        for(let c=range.s.c; c<=range.e.c; c++){
+          const from = cellAddr(r,c);
+          const to = cellAddr(r + count,c);
+          if(ws[from]){
+            ws[to] = ws[from];
+            delete ws[from];
+          }else{
+            delete ws[to];
+          }
+        }
+      }
+
+      const sourceRow = Math.max(range.s.r, styleSourceRow ?? (insertAt - 1));
+      for(let add=0; add<count; add++){
+        const r = insertAt + add;
+        for(let c=range.s.c; c<=range.e.c; c++){
+          const source = ws[cellAddr(sourceRow, c)];
+          if(source?.s || source?.z){
+            ws[cellAddr(r,c)] = {
+              t:'s',
+              v:'',
+              ...(source?.s ? { s:cloneExcelObject(source.s) } : {}),
+              ...(source?.z ? { z:source.z } : {})
+            };
+          }
+        }
+      }
+
+      if(Array.isArray(ws['!rows'])){
+        const sourceMeta = cloneExcelObject(ws['!rows'][sourceRow] || {});
+        ws['!rows'].splice(insertAt, 0, ...Array.from({length:count}, () => cloneExcelObject(sourceMeta)));
+      }
+      for(const merge of (ws['!merges'] || [])){
+        if(merge.s.r >= insertAt){
+          merge.s.r += count;
+          merge.e.r += count;
+        }else if(merge.e.r >= insertAt){
+          merge.e.r += count;
+        }
+      }
+      if(ws['!autofilter']?.ref){
+        const filterRange = XLSX.utils.decode_range(ws['!autofilter'].ref);
+        if(filterRange.s.r >= insertAt) filterRange.s.r += count;
+        if(filterRange.e.r >= insertAt) filterRange.e.r += count;
+        ws['!autofilter'].ref = XLSX.utils.encode_range(filterRange);
+      }
+      range.e.r += count;
+      ws['!ref'] = XLSX.utils.encode_range(range);
+    }
+
+    function weeklyOutboundRebuildDayMergesAndFormulas(ws, layout){
+      const dataMergeCols = new Set([0,1,layout.jbCol,layout.ppCol,layout.totalCol,layout.statusCol]);
+      // อ่านขอบเขตบล็อกจาก Merge เดิมก่อนลบ เพื่อรองรับบล็อกที่เพิ่งแทรกแถวเพิ่ม โดยเฉพาะวันสุดท้ายของเดือน
+      const blocks = weeklyOutboundFindDayBlocks(ws, layout);
+      ws['!merges'] = (ws['!merges'] || []).filter(m => !(m.s.r >= layout.firstDataRow && m.s.c === m.e.c && dataMergeCols.has(m.s.c)));
+      for(const block of blocks){
+        const excelStart = block.start + 1;
+        const excelEnd = block.end + 1;
+        const iso = block.date;
+        const d = jsDateFromISO(iso);
+        weeklyOutboundSetValue(ws, block.start, 0, DAY_TH[d.getDay()], 's', ws[cellAddr(block.start,0)]);
+
+        for(let r=block.start; r<=block.end; r++){
+          weeklyOutboundSetFormula(ws, r, layout.actualCol, weeklyOutboundActualFormula(r + 1), ws[cellAddr(r, layout.actualCol)] || ws[cellAddr(block.start, layout.actualCol)]);
+          if(r > block.start){
+            for(const c of [layout.jbCol,layout.ppCol,layout.totalCol,layout.statusCol]) weeklyOutboundClearCell(ws, r, c);
+          }
+        }
+        weeklyOutboundSetFormula(ws, block.start, layout.jbCol, `SUMIF($F${excelStart}:$F${excelEnd},"JB",X${excelStart}:X${excelEnd})`, ws[cellAddr(block.start, layout.jbCol)]);
+        weeklyOutboundSetFormula(ws, block.start, layout.ppCol, `SUMIF($F${excelStart}:$F${excelEnd},"PP",X${excelStart}:X${excelEnd})`, ws[cellAddr(block.start, layout.ppCol)]);
+        weeklyOutboundSetFormula(ws, block.start, layout.totalCol, `Y${excelStart}+Z${excelStart}`, ws[cellAddr(block.start, layout.totalCol)]);
+        weeklyOutboundSetFormula(ws, block.start, layout.statusCol, `IF(AA${excelStart}=0,"ไม่มีโหลดสินค้า","")`, ws[cellAddr(block.start, layout.statusCol)]);
+
+        if(block.end > block.start){
+          for(const c of dataMergeCols){
+            ws['!merges'].push({ s:{r:block.start,c}, e:{r:block.end,c} });
+          }
+        }
+      }
+      return blocks;
+    }
+
+    function updateWeeklyOutboundTemplateSheet(ws, year, monthIndex, allRows, revisionDate){
+      const layout = weeklyOutboundTemplateLayout(ws);
+      const targetCol = weeklyOutboundTargetRevisionColumn(ws, layout, revisionDate);
+      const monthRows = (allRows || []).filter(row => Number(String(row.date).slice(0,4)) === year && Number(String(row.date).slice(5,7)) === monthIndex + 1);
+      const rowsByDate = new Map();
+      for(const row of monthRows){
+        if(!rowsByDate.has(row.date)) rowsByDate.set(row.date, []);
+        rowsByDate.get(row.date).push(row);
+      }
+
+      let added = 0;
+      let matched = 0;
+      let zeroed = 0;
+      const skippedDates = [];
+      const dates = Array.from({length:monthDays(year, monthIndex)}, (_,i) => `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(i + 1).padStart(2,'0')}`);
+
+      for(const iso of dates){
+        let blocks = weeklyOutboundFindDayBlocks(ws, layout);
+        let block = blocks.find(item => item.date === iso);
+        if(!block){
+          if((rowsByDate.get(iso) || []).length) skippedDates.push(iso);
+          continue;
+        }
+        const currentItems = [...(rowsByDate.get(iso) || [])].sort((a,b) => String(a.productName || '').localeCompare(String(b.productName || ''), 'th', {numeric:true}));
+        const existingRows = [];
+        const blankRows = [];
+        for(let r=block.start; r<=block.end; r++){
+          const name = normalizeOutboundProductDisplay(ws[cellAddr(r,2)]?.v || '');
+          const type = normalizePackType(ws[cellAddr(r,5)]?.v || '') || String(ws[cellAddr(r,5)]?.v || '').trim();
+          if(name) existingRows.push({ row:r, name, productKey:normalizeWeeklyOutboundProductKey(name), type });
+          else blankRows.push(r);
+        }
+
+        // ทุกแถวที่เคยมีสินค้า ต้องมีค่า 0 ใน Revise รอบนี้ก่อน แล้วจึงเขียนยอดล่าสุดทับ
+        for(const existing of existingRows){
+          weeklyOutboundSetValue(ws, existing.row, targetCol, 0, 'n', ws[cellAddr(existing.row, targetCol)] || ws[cellAddr(existing.row, Math.max(layout.qtyStartCol, targetCol - 1))]);
+          zeroed++;
+        }
+
+        const usedItems = new Set();
+        for(const existing of existingRows){
+          let itemIndex = currentItems.findIndex((item, index) => {
+            if(usedItems.has(index)) return false;
+            const key = normalizeWeeklyOutboundProductKey(item.productName);
+            const type = normalizePackType(item.type) || item.type || '';
+            return key === existing.productKey && type === existing.type;
+          });
+          if(itemIndex < 0){
+            const candidates = currentItems.map((item,index) => ({item,index})).filter(({item,index}) => !usedItems.has(index) && normalizeWeeklyOutboundProductKey(item.productName) === existing.productKey);
+            if(candidates.length === 1) itemIndex = candidates[0].index;
+          }
+          if(itemIndex < 0) continue;
+          const item = currentItems[itemIndex];
+          usedItems.add(itemIndex);
+          weeklyOutboundSetValue(ws, existing.row, targetCol, num(item.qty), 'n', ws[cellAddr(existing.row, targetCol)]);
+          if(!existing.type && item.type) weeklyOutboundSetValue(ws, existing.row, 5, item.type, 's', ws[cellAddr(existing.row,5)]);
+          if(!String(ws[cellAddr(existing.row,3)]?.v || '').trim() && item.remark) weeklyOutboundSetValue(ws, existing.row, 3, item.remark, 's', ws[cellAddr(existing.row,3)]);
+          if(!String(ws[cellAddr(existing.row,4)]?.v || '').trim()) weeklyOutboundSetValue(ws, existing.row, 4, item.refName || item.productName, 's', ws[cellAddr(existing.row,4)]);
+          matched++;
+        }
+
+        const pending = currentItems.filter((_,index) => !usedItems.has(index));
+        if(pending.length > blankRows.length){
+          const extra = pending.length - blankRows.length;
+          const oldEnd = block.end;
+          weeklyOutboundInsertRows(ws, oldEnd + 1, extra, oldEnd);
+          block.end += extra;
+          // ขยาย Merge ของวันปัจจุบันให้ครอบแถวใหม่ ก่อนสร้างสูตร/merge ชุดสุดท้ายอีกครั้ง
+          for(const merge of (ws['!merges'] || [])){
+            if(merge.s.r === block.start && merge.e.r === oldEnd && [0,1,layout.jbCol,layout.ppCol,layout.totalCol,layout.statusCol].includes(merge.s.c) && merge.s.c === merge.e.c){
+              merge.e.r += extra;
+            }
+          }
+          for(let r=oldEnd + 1; r<=block.end; r++) blankRows.push(r);
+        }
+
+        pending.forEach((item, index) => {
+          const r = blankRows[index];
+          const styleProduct = ws[cellAddr(r,2)] || ws[cellAddr(block.start,2)];
+          weeklyOutboundSetValue(ws, r, 2, item.productName || item.refName || '', 's', styleProduct);
+          weeklyOutboundSetValue(ws, r, 3, item.remark || weeklyOutboundLoadRemark(item.type, item.qty), 's', ws[cellAddr(r,3)] || ws[cellAddr(block.start,3)]);
+          weeklyOutboundSetValue(ws, r, 4, item.refName || item.productName || '', 's', ws[cellAddr(r,4)] || ws[cellAddr(block.start,4)]);
+          weeklyOutboundSetValue(ws, r, 5, item.type || '', 's', ws[cellAddr(r,5)] || ws[cellAddr(block.start,5)]);
+          for(let c=layout.qtyStartCol; c<targetCol; c++) weeklyOutboundSetValue(ws, r, c, 0, 'n', ws[cellAddr(r,c)] || ws[cellAddr(block.start,c)]);
+          weeklyOutboundSetValue(ws, r, targetCol, num(item.qty), 'n', ws[cellAddr(r,targetCol)] || ws[cellAddr(block.start,targetCol)]);
+          for(let c=targetCol + 1; c<=layout.qtyEndCol; c++) weeklyOutboundClearCell(ws, r, c);
+          added++;
+        });
+      }
+
+      const blocks = weeklyOutboundRebuildDayMergesAndFormulas(ws, layout);
+      const targetColumnName = XLSX.utils.encode_col(targetCol);
+      return { targetCol, targetColumnName, revisionDate, added, matched, zeroed, skippedDates, blocks:blocks.length };
+    }
+
+    function updateWeeklyOutboundTemplateWorkbook(workbook, year, monthIndex, allRows, revisionDate){
+      let sheetName = findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex);
+      if(!sheetName){
+        const created = createWeeklyOutboundSheet(year, monthIndex, [], revisionDate);
+        sheetName = sheetNameSafe(`${MONTH_SHORT_EN[monthIndex].toUpperCase()} ${year}`);
+        XLSX.utils.book_append_sheet(workbook, created, sheetName);
+      }
+      const ws = workbook.Sheets[sheetName];
+      const result = updateWeeklyOutboundTemplateSheet(ws, year, monthIndex, allRows, revisionDate);
+      workbook.Workbook = workbook.Workbook || {};
+      workbook.Workbook.CalcPr = {
+        ...(workbook.Workbook.CalcPr || {}),
+        calcMode:'auto',
+        fullCalcOnLoad:true,
+        forceFullCalc:true
+      };
+      return { ...result, sheetName };
+    }
+
+    function downloadArrayBuffer(buffer, filename){
+      const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
     function createWeeklyOutboundSheet(year, monthIndex, allRows, extractDate){
       const st = excelBaseStyles();
       const days = monthDays(year, monthIndex);
@@ -4602,34 +5048,80 @@
       return ws;
     }
 
-    async function exportWeeklyOutboundExcel(planFiles=null){
+    async function exportWeeklyOutboundExcel(planFiles=null, templateFile=null){
       if(!ensureExcelLibrary()) return;
       if(currentPage !== OUTBOUND_PAGE){
         alert('ปุ่มนี้ใช้สำหรับหน้า “ส่งออก” เท่านั้น กรุณาเปิดหน้า ส่งออก ก่อน');
         return;
       }
       const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
+      const monthIndex = Math.max(0, Math.min(11, (Number(currentDate.slice(5,7)) || 1) - 1));
+      const revisionDate = weeklyOutboundRevisionDate(currentDate);
       const webRows = await getOutboundRowsForExportYear(year);
       const storedFiles = planFiles || await getStoredWeeklyOutboundPlanFilesForYear(year);
+      const originalTemplate = templateFile || await getStoredWeeklyOutboundTemplateFile(year);
+      if(!originalTemplate){
+        alert(`ยังไม่ได้ตั้งไฟล์ Weekly ต้นฉบับปี ${year}\nกรุณากด “ตั้งไฟล์ Weekly ต้นฉบับ” ก่อน Export`);
+        return;
+      }
+
       const planRecords = await parseWeeklyOutboundPlanFiles(storedFiles);
       const webRecords = weeklyOutboundWebRecords(webRows);
       const combined = combineWeeklyOutboundRecords(webRecords, planRecords)
         .filter(row => String(row.date).startsWith(`${year}-`));
 
-      if(!combined.length){
-        alert('ยังไม่มีข้อมูลสำหรับทำ Weekly Outbound: หน้าเว็บส่งออกยังว่าง และยังไม่ได้ตั้งไฟล์ STP/PTR ของเดือนนี้');
+      if(!combined.length && !storedFiles.length && !webRows.length){
+        alert('ยังไม่มีข้อมูลหน้าเว็บส่งออก และยังไม่ได้ตั้งไฟล์ STP/PTR สำหรับนำไปอัปเดต Weekly');
         return;
       }
 
-      const wb = XLSX.utils.book_new();
-      for(let month=0; month<12; month++){
-        const ws = createWeeklyOutboundSheet(year, month, combined, currentDate);
-        XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(`${MONTH_SHORT_EN[month].toUpperCase()} ${year}`));
+      const templateBuffer = await fileEntryArrayBuffer(originalTemplate);
+      if(!templateBuffer){
+        alert('อ่านไฟล์ Weekly ต้นฉบับไม่สำเร็จ กรุณาตั้งไฟล์ใหม่อีกครั้ง');
+        return;
       }
-      downloadWorkbook(wb, `Weekly Outbound Plan ${year}.xlsx`);
-      const planCount = planRecords.length;
-      const webCount = webRecords.length;
-      console.log(`Weekly Outbound exported: web=${webCount}, plan=${planCount}, combined=${combined.length}`);
+
+      let workbook;
+      try{
+        workbook = XLSX.read(templateBuffer, { type:'array', cellStyles:true, cellDates:false, cellFormula:true });
+      }catch(err){
+        console.error(err);
+        alert('เปิดไฟล์ Weekly ต้นฉบับไม่สำเร็จ กรุณาตรวจสอบว่าเป็นไฟล์ .xlsx หรือ .xls ที่ถูกต้อง');
+        return;
+      }
+
+      let updateResult;
+      try{
+        updateResult = updateWeeklyOutboundTemplateWorkbook(workbook, year, monthIndex, combined, revisionDate);
+      }catch(err){
+        console.error(err);
+        alert(`อัปเดต Weekly ต้นฉบับไม่สำเร็จ\n${err?.message || err}`);
+        return;
+      }
+
+      const outputName = `Weekly Outbound Plan ${year}.xlsx`;
+      const outputBuffer = XLSX.write(workbook, { bookType:'xlsx', type:'array', cellStyles:true, bookSST:false });
+      let savedAsNextTemplate = true;
+      try{
+        await saveWeeklyOutboundTemplateBuffer(year, outputBuffer, outputName);
+        await refreshWeeklyOutboundPlanStatus();
+      }catch(err){
+        savedAsNextTemplate = false;
+        console.error('บันทึก Weekly ต้นฉบับรอบถัดไปไม่สำเร็จ', err);
+      }
+      downloadArrayBuffer(outputBuffer, outputName);
+
+      const revisionLabel = updateResult.targetCol === 6 ? 'Original Plan' : `Revise ${updateResult.targetCol - 6}`;
+      const skippedText = updateResult.skippedDates.length ? `\nวันที่ไม่มีบล็อกในต้นฉบับ: ${updateResult.skippedDates.join(', ')}` : '';
+      alert(
+        `อัปเดต ${updateResult.sheetName} สำเร็จ\n` +
+        `รอบวันที่ ${updateResult.revisionDate} → ${revisionLabel} (คอลัมน์ ${updateResult.targetColumnName})\n` +
+        `จับคู่แถวเดิม ${updateResult.matched} รายการ • เพิ่มแถวใหม่ ${updateResult.added} รายการ\n` +
+        `สินค้าที่ไม่อยู่ในแผนรอบนี้ยังคงแถวเดิมและใส่ 0 ตู้แล้ว` +
+        `${skippedText}\n\n` +
+        (savedAsNextTemplate ? 'ไฟล์นี้ถูกเก็บเป็นต้นฉบับสำหรับสัปดาห์ถัดไปแล้ว' : 'ดาวน์โหลดสำเร็จ แต่บันทึกเป็นต้นฉบับรอบถัดไปไม่สำเร็จ กรุณาอัปโหลดไฟล์นี้กลับเข้าระบบ')
+      );
+      console.log(`Weekly Outbound template updated: sheet=${updateResult.sheetName}, revision=${revisionLabel}, web=${webRecords.length}, plan=${planRecords.length}, combined=${combined.length}, added=${updateResult.added}`);
     }
 
     async function handleWeeklyOutboundExportClick(){
@@ -4638,16 +5130,25 @@
         return;
       }
       const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
-      const storedFiles = await getStoredWeeklyOutboundPlanFilesForYear(year);
+      const [template, storedFiles] = await Promise.all([
+        getStoredWeeklyOutboundTemplateFile(year),
+        getStoredWeeklyOutboundPlanFilesForYear(year)
+      ]);
+      if(!template){
+        alert(`กรุณาตั้งไฟล์ Weekly ต้นฉบับปี ${year} ก่อน ระบบจะใช้ไฟล์นี้รักษาแถวและ Revise เดิมทุกสัปดาห์`);
+        weeklyOutboundTemplateInput.value = '';
+        weeklyOutboundTemplateInput.click();
+        return;
+      }
       if(!storedFiles.length){
-        const ok = confirm('ยังไม่ได้ตั้งไฟล์ STP/PTR สำหรับปีนี้\n\nกด OK เพื่อตั้งไฟล์ STP ของเดือนที่เลือกก่อน หรือ Cancel เพื่อส่งออกจากข้อมูลหน้าเว็บอย่างเดียว');
+        const ok = confirm('ยังไม่ได้ตั้งไฟล์ STP/PTR สำหรับปีนี้\n\nกด OK เพื่อตั้งไฟล์ STP ของเดือนที่เลือกก่อน หรือ Cancel เพื่อใช้ข้อมูลหน้าเว็บส่งออกอย่างเดียว');
         if(ok){
           weeklyOutboundStpInput.value = '';
           weeklyOutboundStpInput.click();
           return;
         }
       }
-      await exportWeeklyOutboundExcel(storedFiles);
+      await exportWeeklyOutboundExcel(storedFiles, template);
     }
 
     async function exportWeeklyInboundExcel(){
@@ -5207,8 +5708,20 @@
     $("exportPlanExcelBtn").addEventListener("click", exportPlanExcelLikeImage);
     $("exportWeeklyExcelBtn").addEventListener("click", exportWeeklyInboundExcel);
     $("exportWeeklyOutboundBtn").addEventListener("click", handleWeeklyOutboundExportClick);
+    $("setWeeklyOutboundTemplateBtn").addEventListener("click", () => { weeklyOutboundTemplateInput.value = ""; weeklyOutboundTemplateInput.click(); });
     $("setWeeklyOutboundStpBtn").addEventListener("click", () => { weeklyOutboundStpInput.value = ""; weeklyOutboundStpInput.click(); });
     $("setWeeklyOutboundPtrBtn").addEventListener("click", () => { weeklyOutboundPtrInput.value = ""; weeklyOutboundPtrInput.click(); });
+    weeklyOutboundTemplateInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if(file){
+        try{ await saveWeeklyOutboundTemplateFile(file); }
+        catch(err){
+          console.error(err);
+          alert(`ตั้งไฟล์ Weekly ต้นฉบับไม่สำเร็จ\n${err?.message || err}`);
+        }
+      }
+      e.target.value = "";
+    });
     weeklyOutboundStpInput.addEventListener("change", async (e) => {
       const file = e.target.files?.[0];
       if(file) await saveWeeklyOutboundPlanFile('STP', file);
