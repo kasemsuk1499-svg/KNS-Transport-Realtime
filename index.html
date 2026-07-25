@@ -4605,8 +4605,9 @@ ${fileName}
     }
 
     function weeklyOutboundActualFormula(rowNumber){
-      const qtyCols = ['G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W'];
-      return qtyCols.slice().reverse().reduce((acc, col) => `IF(${col}${rowNumber}<>"",${col}${rowNumber},${acc})`, '0');
+      // Actual Ship ต้องอ้างอิง “คอลัมน์รอบล่าสุดของทั้งชีท” จากวันที่บนหัวตาราง
+      // ไม่ย้อนกลับไปหยิบค่ารอบเก่าของแต่ละแถวเมื่อช่องรอบล่าสุดว่าง
+      return `IFERROR(LOOKUP(2,1/($G$2:$W$2<>""),G${rowNumber}:W${rowNumber})+0,0)`;
     }
 
     function weeklyOutboundRevisionDate(date=currentDate){
@@ -5610,64 +5611,105 @@ ${fileName}
         return;
       }
 
-      const sourceSheetName = findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex);
-      const originalStyleKeys = sourceSheetName
-        ? weeklyOutboundCaptureOriginalStyleKeys(workbook.Sheets[sourceSheetName])
-        : {};
-      const patchRecorder = { changedCells:new Set(), insertions:[] };
+      // อัปเดตทุกเดือนที่พบวันที่อ้างอิงอยู่ในข้อมูลทั้งปี ไม่จำกัดเฉพาะเดือนที่กำลังเปิดหน้าเว็บ
+      // และคงอัปเดตเดือนที่เลือกไว้ด้วย เพื่อรักษาพฤติกรรมเดิมกรณีต้องใส่ 0 ในรอบล่าสุด
+      const monthsWithReferences = new Set(
+        combined
+          .map(row => Number(String(row?.date || '').slice(5,7)) - 1)
+          .filter(value => Number.isInteger(value) && value >= 0 && value <= 11)
+      );
+      monthsWithReferences.add(monthIndex);
+      const monthIndexesToUpdate = Array.from(monthsWithReferences).sort((a,b) => a - b);
+      const sheetUpdates = [];
 
-      let updateResult;
-      weeklyOutboundPatchRecorder = patchRecorder;
       try{
-        updateResult = updateWeeklyOutboundTemplateWorkbook(workbook, year, monthIndex, combined, revisionDate);
+        for(const updateMonthIndex of monthIndexesToUpdate){
+          const sourceSheetName = findWeeklyOutboundTemplateSheetName(workbook, year, updateMonthIndex);
+          if(!sourceSheetName) throw new Error(`ไม่พบชีทเดือน ${MONTH_SHORT_EN[updateMonthIndex]} ${year}`);
+          const originalStyleKeys = weeklyOutboundCaptureOriginalStyleKeys(workbook.Sheets[sourceSheetName]);
+          const patchRecorder = { changedCells:new Set(), insertions:[] };
+          weeklyOutboundPatchRecorder = patchRecorder;
+          const result = updateWeeklyOutboundTemplateWorkbook(
+            workbook,
+            year,
+            updateMonthIndex,
+            combined,
+            revisionDate
+          );
+          sheetUpdates.push({ ...result, updateMonthIndex, patchRecorder, originalStyleKeys });
+        }
       }catch(err){
         console.error(err);
-        alert(`อัปเดต Weekly ต้นฉบับไม่สำเร็จ\n${err?.message || err}`);
+        alert(`อัปเดต Weekly ต้นฉบับไม่สำเร็จ
+${err?.message || err}`);
         return;
       }finally{
         weeklyOutboundPatchRecorder = null;
       }
 
       const outputName = `Weekly Outbound Plan ${year} - 12 Months - ${currentDate}.xlsx`;
-      let outputBuffer;
+      let outputBuffer = templateBuffer;
       try{
-        outputBuffer = await weeklyOutboundWritePreservingTemplateStyles(
-          templateBuffer,
-          workbook,
-          updateResult.sheetName,
-          patchRecorder,
-          originalStyleKeys
-        );
+        // เขียนกลับทีละชีทลงสำเนาเดียวกัน เพื่อให้ไฟล์สุดท้ายมีข้อมูลครบทุกเดือนที่พบในอ้างอิง
+        for(const update of sheetUpdates){
+          outputBuffer = await weeklyOutboundWritePreservingTemplateStyles(
+            outputBuffer,
+            workbook,
+            update.sheetName,
+            update.patchRecorder,
+            update.originalStyleKeys
+          );
+        }
       }catch(err){
         console.error(err);
-        alert(`สร้างไฟล์ Weekly โดยรักษาสีต้นฉบับไม่สำเร็จ\n${err?.message || err}\n\nระบบหยุด Export เพื่อไม่ให้ได้ไฟล์สีหาย`);
+        alert(`สร้างไฟล์ Weekly โดยรักษาสีต้นฉบับไม่สำเร็จ
+${err?.message || err}
+
+ระบบหยุด Export เพื่อไม่ให้ได้ไฟล์สีหาย`);
         return;
       }
 
       try{
-        await weeklyOutboundAssertColorsPreserved(templateBuffer, outputBuffer, updateResult.sheetName);
+        for(const update of sheetUpdates){
+          await weeklyOutboundAssertColorsPreserved(templateBuffer, outputBuffer, update.sheetName);
+        }
       }catch(err){
         console.error(err);
-        alert(`ตรวจสีไฟล์ Weekly ไม่ผ่าน\n${err?.message || err}\n\nยังไม่มีไฟล์ถูกดาวน์โหลด กรุณากด “ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน” แล้วเลือกไฟล์ต้นฉบับจริงอีกครั้ง`);
+        alert(`ตรวจสีไฟล์ Weekly ไม่ผ่าน
+${err?.message || err}
+
+ยังไม่มีไฟล์ถูกดาวน์โหลด กรุณากด “ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน” แล้วเลือกไฟล์ต้นฉบับจริงอีกครั้ง`);
         return;
       }
 
       // ดาวน์โหลดเป็นไฟล์ใหม่เท่านั้น ต้นฉบับในฐานข้อมูลไม่ถูกแก้หรือเขียนทับ
       downloadArrayBuffer(outputBuffer, outputName);
 
-      const revisionLabel = updateResult.targetCol === 6 ? 'Original Plan' : `Revise ${updateResult.targetCol - 6}`;
-      const skippedText = updateResult.skippedDates.length ? `\nวันที่ไม่มีบล็อกในต้นฉบับ: ${updateResult.skippedDates.join(', ')}` : '';
+      const updateLines = sheetUpdates.map(update => {
+        const revisionLabel = update.targetCol === 6 ? 'Original Plan' : `Revise ${update.targetCol - 6}`;
+        const skipped = update.skippedDates.length ? ` • ข้าม ${update.skippedDates.length} วัน` : '';
+        return `${update.sheetName}: ${revisionLabel} (${update.targetColumnName}) • จับคู่ ${update.matched} • เพิ่ม ${update.added}${skipped}`;
+      });
+      const totalMatched = sheetUpdates.reduce((sum, item) => sum + item.matched, 0);
+      const totalAdded = sheetUpdates.reduce((sum, item) => sum + item.added, 0);
       alert(
-        `อัปเดต ${updateResult.sheetName} สำเร็จ\n` +
-        `รอบวันที่ ${updateResult.revisionDate} → ${revisionLabel} (คอลัมน์ ${updateResult.targetColumnName})\n` +
-        `จับคู่แถวเดิม ${updateResult.matched} รายการ • เพิ่มแถวใหม่ ${updateResult.added} รายการ\n` +
-        `สินค้าที่ไม่อยู่ในแผนรอบนี้ยังคงแถวเดิมและใส่ 0 ตู้แล้ว` +
-        `${skippedText}
+        `อัปเดตข้อมูลอ้างอิงทั้งปีสำเร็จ ${sheetUpdates.length} เดือน
+` +
+        `รอบวันที่ ${revisionDate}
+
+` +
+        `${updateLines.join('\n')}
+
+` +
+        `รวมจับคู่แถวเดิม ${totalMatched} รายการ • เพิ่มแถวใหม่ ${totalAdded} รายการ
+` +
+        `Actual Ship ของทุกแถวจะยึดคอลัมน์รอบล่าสุดตามวันที่บนหัวตาราง
 
 ` +
         `ดาวน์โหลดเป็นไฟล์ใหม่ครบ 12 เดือนแล้ว ต้นฉบับหลักยังคงเดิมทุกอย่าง`
       );
-      console.log(`Weekly Outbound template updated: sheet=${updateResult.sheetName}, revision=${revisionLabel}, web=${webRecords.length}, plan=${planRecords.length}, combined=${combined.length}, added=${updateResult.added}`);
+      console.log(`Weekly Outbound all-year template updated: sheets=${sheetUpdates.map(x => x.sheetName).join(',')}, web=${webRecords.length}, plan=${planRecords.length}, combined=${combined.length}, added=${totalAdded}`);
+
     }
 
     async function handleWeeklyOutboundExportClick(){
