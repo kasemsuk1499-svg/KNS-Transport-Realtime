@@ -1028,13 +1028,13 @@
         <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
         <button id="exportPlanExcelBtn" class="light">ส่งออก Excel ตามสีหน้าเว็บ</button>
         <button id="exportWeeklyExcelBtn" class="light">Export Excel Weekly</button>
-        <button id="setWeeklyOutboundTemplateBtn" class="light" type="button">ตั้งไฟล์ Weekly ต้นฉบับสี / รีเซ็ตสี</button>
+        <button id="setWeeklyOutboundTemplateBtn" class="light" type="button">ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน</button>
         <input id="weeklyOutboundTemplateInput" type="file" accept=".xlsx,.xls" style="display:none" />
         <button id="setWeeklyOutboundStpBtn" class="light" type="button">ตั้งไฟล์ STP เดือนนี้</button>
         <input id="weeklyOutboundStpInput" type="file" accept=".xlsx,.xls,.csv,text/csv" style="display:none" />
         <button id="setWeeklyOutboundPtrBtn" class="light" type="button">ตั้งไฟล์ PTR เดือนนี้</button>
         <input id="weeklyOutboundPtrInput" type="file" accept=".xlsx,.xls,.csv,text/csv" style="display:none" />
-        <button id="exportWeeklyOutboundBtn" class="light" type="button">Export Weekly Outbound</button>
+        <button id="exportWeeklyOutboundBtn" class="light" type="button">Export Weekly Outbound 12 เดือน</button>
         <span id="weeklyOutboundPlanStatus" class="hint weekly-outbound-status"></span>
         <button id="exportBalanceExcelBtn" class="light">Export Excel Balance</button>
       </div>
@@ -4134,12 +4134,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function weeklyOutboundTemplateFileRef(year=weeklyOutboundTemplateYear()){
-      // สำเนาทำงาน: อัปเดตต่อเนื่องทุกครั้งที่ Export
+      // path เก่าคงไว้เพื่อ compatibility แต่ระบบใหม่ไม่ใช้เป็นต้นฉบับ
       return ref(db, `knsTransport/weeklyOutboundTemplates/${year}`);
     }
 
     function weeklyOutboundTemplateMasterFileRef(year=weeklyOutboundTemplateYear()){
-      // แม่แบบสี: เก็บไฟล์ที่ผู้ใช้เลือกไว้แบบไม่เขียนทับ เพื่อใช้กู้สีได้เสมอ
+      // ต้นฉบับหลัก 12 เดือน: เก็บไฟล์ที่ผู้ใช้เลือกและไม่เขียนทับจากการ Export
       return ref(db, `knsTransport/weeklyOutboundTemplateMasters/${year}`);
     }
 
@@ -4168,16 +4168,32 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if(!file) return;
       const year = weeklyOutboundTemplateYear();
       const buffer = await file.arrayBuffer();
-      const fileName = file.name || `Weekly Outbound Plan ${year}.xlsx`;
+      const fileName = file.name || `Weekly Outbound Master ${year} - 12 Months.xlsx`;
 
-      // ทุกครั้งที่กดตั้งต้นฉบับ ให้รีเซ็ตทั้งแม่แบบสีและสำเนาทำงานจากไฟล์เดียวกัน
-      // ทำให้ไฟล์ที่เคย Export ด้วยโค้ดเก่าและสีหาย ถูกล้างออกทันที
-      await Promise.all([
-        saveWeeklyOutboundTemplateBuffer(year, buffer, fileName, { asMaster:true }),
-        saveWeeklyOutboundTemplateBuffer(year, buffer, fileName, { asMaster:false })
-      ]);
+      let workbook;
+      try{
+        workbook = XLSX.read(buffer, { type:'array', cellStyles:true, cellDates:false, cellFormula:true });
+      }catch(err){
+        throw new Error('เปิดไฟล์ต้นฉบับไม่สำเร็จ กรุณาเลือกไฟล์ Excel .xlsx ที่ถูกต้อง');
+      }
+      const missing = weeklyOutboundMissingMonthSheets(workbook, year);
+      if(missing.length){
+        throw new Error(`ไฟล์ต้นฉบับต้องมีครบ 12 เดือน
+ยังขาดชีท: ${missing.join(', ')}`);
+      }
+
+      // เก็บเฉพาะ “ต้นฉบับหลัก 12 เดือน” ไฟล์ Export จะไม่ถูกบันทึกทับกลับมา
+      await saveWeeklyOutboundTemplateBuffer(year, buffer, fileName, { asMaster:true });
       await refreshWeeklyOutboundPlanStatus();
-      alert(`ตั้งไฟล์ Weekly ต้นฉบับสีปี ${year} เรียบร้อยแล้ว\n${fileName}\n\nระบบแยกเก็บ “แม่แบบสี” ไว้ต่างหากและจะไม่เขียนทับแม่แบบนี้อีก`);
+      alert(
+        `ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน ปี ${year} เรียบร้อยแล้ว
+${fileName}
+
+` +
+        `ระบบจะใช้ไฟล์นี้เป็นต้นฉบับอ้างอิงเท่านั้น
+` +
+        `ทุกครั้งที่ Export จะสร้างไฟล์ใหม่แยกออกมา และจะไม่เขียนทับต้นฉบับ`
+      );
     }
 
     async function getStoredWeeklyOutboundTemplateEntry(fileRef, year){
@@ -4198,7 +4214,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     async function getStoredWeeklyOutboundTemplateFile(year=weeklyOutboundTemplateYear()){
-      return await getStoredWeeklyOutboundTemplateEntry(weeklyOutboundTemplateFileRef(year), year);
+      // รองรับชื่อฟังก์ชันเดิม แต่ให้อ่านจากต้นฉบับหลัก 12 เดือนเท่านั้น
+      return await getStoredWeeklyOutboundTemplateEntry(weeklyOutboundTemplateMasterFileRef(year), year);
     }
 
     async function getStoredWeeklyOutboundMasterTemplateFile(year=weeklyOutboundTemplateYear()){
@@ -4312,17 +4329,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       try{
         const monthKey = weeklyOutboundPlanMonthKey();
         const year = weeklyOutboundTemplateYear();
-        const [masterTemplate, template, stp, ptr] = await Promise.all([
+        const [masterTemplate, stp, ptr] = await Promise.all([
           getStoredWeeklyOutboundMasterTemplateFile(year),
-          getStoredWeeklyOutboundTemplateFile(year),
           getStoredWeeklyOutboundPlanFile('STP', monthKey),
           getStoredWeeklyOutboundPlanFile('PTR', monthKey)
         ]);
-        const masterText = masterTemplate ? `แม่แบบสี: ${masterTemplate.name}` : 'แม่แบบสี: ต้องตั้งใหม่ 1 ครั้ง';
-        const templateText = template ? `สำเนาทำงาน: ${template.name}` : 'สำเนาทำงาน: ยังไม่มี';
+        const masterText = masterTemplate ? `ต้นฉบับ 12 เดือน: ${masterTemplate.name}` : 'ต้นฉบับ 12 เดือน: ยังไม่ตั้งไฟล์';
         const stpText = stp ? `STP: ${stp.name}` : 'STP: ยังไม่ตั้งไฟล์';
         const ptrText = ptr ? `PTR: ${ptr.name}` : 'PTR: ยังไม่ตั้งไฟล์';
-        weeklyOutboundPlanStatus.textContent = `${year} • ${masterText} • ${templateText} • ${monthKey} • ${stpText} • ${ptrText}`;
+        weeklyOutboundPlanStatus.textContent = `${year} • ${masterText} • ${monthKey} • ${stpText} • ${ptrText}`;
       }catch(err){
         console.error(err);
         weeklyOutboundPlanStatus.textContent = 'อ่านสถานะไฟล์ Weekly / Plan ไม่สำเร็จ';
@@ -5147,6 +5162,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }) || '';
     }
 
+    function weeklyOutboundMissingMonthSheets(workbook, year){
+      const missing = [];
+      for(let monthIndex=0; monthIndex<12; monthIndex++){
+        if(!findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex)){
+          missing.push(`${MONTH_SHORT_EN[monthIndex].slice(0,3).toUpperCase()} ${year}`);
+        }
+      }
+      return missing;
+    }
+
     function weeklyOutboundTargetRevisionColumn(ws, layout, revisionDate){
       let targetCol = -1;
       let firstEmptyCol = -1;
@@ -5179,13 +5204,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return targetCol;
     }
 
-    function weeklyOutboundFindDayBlocks(ws, layout){
+    function weeklyOutboundFindDayBlocks(ws, layout, year=null, monthIndex=null){
       const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:AB1');
       const starts = [];
+      const validDayLabels = new Set(DAY_TH);
+      let inferredDay = 1;
+      const maxDays = (year && monthIndex !== null) ? monthDays(year, monthIndex) : 31;
+
       for(let r=layout.firstDataRow; r<=range.e.r; r++){
-        const iso = weeklyOutboundCellDateISO(ws[cellAddr(r, 1)]);
-        if(iso) starts.push({ start:r, date:iso });
+        const rawDate = ws[cellAddr(r, 1)];
+        const parsedISO = weeklyOutboundCellDateISO(rawDate);
+        const dayLabel = String(ws[cellAddr(r,0)]?.v ?? '').trim();
+        const isDayStart = !!parsedISO || validDayLabels.has(dayLabel);
+        if(!isDayStart) continue;
+
+        let iso = parsedISO;
+        if(!iso && year && monthIndex !== null && inferredDay <= maxDays){
+          iso = `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(inferredDay).padStart(2,'0')}`;
+        }
+        if(!iso) continue;
+        starts.push({ start:r, date:iso });
+        inferredDay++;
       }
+
       const merges = ws['!merges'] || [];
       return starts.map((item, index) => {
         const dateMerge = merges.find(m => m.s.r === item.start && m.s.c === 1 && m.e.c === 1);
@@ -5258,10 +5299,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       ws['!ref'] = XLSX.utils.encode_range(range);
     }
 
-    function weeklyOutboundRebuildDayMergesAndFormulas(ws, layout){
+    function weeklyOutboundRebuildDayMergesAndFormulas(ws, layout, year, monthIndex){
       const dataMergeCols = new Set([0,1,layout.jbCol,layout.ppCol,layout.totalCol,layout.statusCol]);
       // อ่านขอบเขตบล็อกจาก Merge เดิมก่อนลบ เพื่อรองรับบล็อกที่เพิ่งแทรกแถวเพิ่ม โดยเฉพาะวันสุดท้ายของเดือน
-      const blocks = weeklyOutboundFindDayBlocks(ws, layout);
+      const blocks = weeklyOutboundFindDayBlocks(ws, layout, year, monthIndex);
       ws['!merges'] = (ws['!merges'] || []).filter(m => !(m.s.r >= layout.firstDataRow && m.s.c === m.e.c && dataMergeCols.has(m.s.c)));
       for(const block of blocks){
         const excelStart = block.start + 1;
@@ -5307,7 +5348,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const dates = Array.from({length:monthDays(year, monthIndex)}, (_,i) => `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(i + 1).padStart(2,'0')}`);
 
       for(const iso of dates){
-        let blocks = weeklyOutboundFindDayBlocks(ws, layout);
+        let blocks = weeklyOutboundFindDayBlocks(ws, layout, year, monthIndex);
         let block = blocks.find(item => item.date === iso);
         if(!block){
           if((rowsByDate.get(iso) || []).length) skippedDates.push(iso);
@@ -5380,19 +5421,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
       }
 
-      const blocks = weeklyOutboundRebuildDayMergesAndFormulas(ws, layout);
+      const blocks = weeklyOutboundRebuildDayMergesAndFormulas(ws, layout, year, monthIndex);
       const targetColumnName = XLSX.utils.encode_col(targetCol);
       return { targetCol, targetColumnName, revisionDate, added, matched, zeroed, skippedDates, blocks:blocks.length };
     }
 
     function updateWeeklyOutboundTemplateWorkbook(workbook, year, monthIndex, allRows, revisionDate){
-      let sheetName = findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex);
-      const createdSheet = !sheetName;
-      if(!sheetName){
-        const created = createWeeklyOutboundSheet(year, monthIndex, [], revisionDate);
-        sheetName = sheetNameSafe(`${MONTH_SHORT_EN[monthIndex].toUpperCase()} ${year}`);
-        XLSX.utils.book_append_sheet(workbook, created, sheetName);
+      const missing = weeklyOutboundMissingMonthSheets(workbook, year);
+      if(missing.length){
+        throw new Error(`ต้นฉบับยังมีชีทไม่ครบ 12 เดือน: ${missing.join(', ')}`);
       }
+      const sheetName = findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex);
+      if(!sheetName) throw new Error(`ไม่พบชีทเดือน ${MONTH_SHORT_EN[monthIndex]} ${year}`);
       const ws = workbook.Sheets[sheetName];
       const result = updateWeeklyOutboundTemplateSheet(ws, year, monthIndex, allRows, revisionDate);
       workbook.Workbook = workbook.Workbook || {};
@@ -5402,7 +5442,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         fullCalcOnLoad:true,
         forceFullCalc:true
       };
-      return { ...result, sheetName, createdSheet };
+      return { ...result, sheetName, createdSheet:false };
     }
 
     function downloadArrayBuffer(buffer, filename){
@@ -5539,9 +5579,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const revisionDate = weeklyOutboundRevisionDate(currentDate);
       const webRows = await getOutboundRowsForExportYear(year);
       const storedFiles = planFiles || await getStoredWeeklyOutboundPlanFilesForYear(year);
-      const originalTemplate = templateFile || await getStoredWeeklyOutboundTemplateFile(year);
+      const originalTemplate = templateFile || await getStoredWeeklyOutboundMasterTemplateFile(year);
       if(!originalTemplate){
-        alert(`ยังไม่ได้ตั้งไฟล์ Weekly ต้นฉบับปี ${year}\nกรุณากด “ตั้งไฟล์ Weekly ต้นฉบับ” ก่อน Export`);
+        alert(`ยังไม่ได้ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน ปี ${year}\nกรุณากด “ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน” ก่อน Export`);
         return;
       }
 
@@ -5588,21 +5628,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         weeklyOutboundPatchRecorder = null;
       }
 
-      const outputName = `Weekly Outbound Plan ${year}.xlsx`;
+      const outputName = `Weekly Outbound Plan ${year} - 12 Months - ${currentDate}.xlsx`;
       let outputBuffer;
       try{
-        if(updateResult.createdSheet){
-          // ชีทที่ไม่มีในต้นฉบับไม่มีรูปแบบเดิมให้คัดลอก จึงสร้างตามรูปแบบมาตรฐานของระบบ
-          outputBuffer = XLSX.write(workbook, { bookType:'xlsx', type:'array', cellStyles:true, bookSST:false });
-        }else{
-          outputBuffer = await weeklyOutboundWritePreservingTemplateStyles(
-            templateBuffer,
-            workbook,
-            updateResult.sheetName,
-            patchRecorder,
-            originalStyleKeys
-          );
-        }
+        outputBuffer = await weeklyOutboundWritePreservingTemplateStyles(
+          templateBuffer,
+          workbook,
+          updateResult.sheetName,
+          patchRecorder,
+          originalStyleKeys
+        );
       }catch(err){
         console.error(err);
         alert(`สร้างไฟล์ Weekly โดยรักษาสีต้นฉบับไม่สำเร็จ\n${err?.message || err}\n\nระบบหยุด Export เพื่อไม่ให้ได้ไฟล์สีหาย`);
@@ -5610,23 +5645,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       try{
-        if(!updateResult.createdSheet){
-          await weeklyOutboundAssertColorsPreserved(templateBuffer, outputBuffer, updateResult.sheetName);
-        }
+        await weeklyOutboundAssertColorsPreserved(templateBuffer, outputBuffer, updateResult.sheetName);
       }catch(err){
         console.error(err);
-        alert(`ตรวจสีไฟล์ Weekly ไม่ผ่าน\n${err?.message || err}\n\nยังไม่มีไฟล์ถูกดาวน์โหลด กรุณากด “ตั้งไฟล์ Weekly ต้นฉบับสี / รีเซ็ตสี” แล้วเลือกไฟล์ต้นฉบับจริงอีกครั้ง`);
+        alert(`ตรวจสีไฟล์ Weekly ไม่ผ่าน\n${err?.message || err}\n\nยังไม่มีไฟล์ถูกดาวน์โหลด กรุณากด “ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน” แล้วเลือกไฟล์ต้นฉบับจริงอีกครั้ง`);
         return;
       }
 
-      let savedAsNextTemplate = true;
-      try{
-        await saveWeeklyOutboundTemplateBuffer(year, outputBuffer, outputName);
-        await refreshWeeklyOutboundPlanStatus();
-      }catch(err){
-        savedAsNextTemplate = false;
-        console.error('บันทึก Weekly ต้นฉบับรอบถัดไปไม่สำเร็จ', err);
-      }
+      // ดาวน์โหลดเป็นไฟล์ใหม่เท่านั้น ต้นฉบับในฐานข้อมูลไม่ถูกแก้หรือเขียนทับ
       downloadArrayBuffer(outputBuffer, outputName);
 
       const revisionLabel = updateResult.targetCol === 6 ? 'Original Plan' : `Revise ${updateResult.targetCol - 6}`;
@@ -5636,8 +5662,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         `รอบวันที่ ${updateResult.revisionDate} → ${revisionLabel} (คอลัมน์ ${updateResult.targetColumnName})\n` +
         `จับคู่แถวเดิม ${updateResult.matched} รายการ • เพิ่มแถวใหม่ ${updateResult.added} รายการ\n` +
         `สินค้าที่ไม่อยู่ในแผนรอบนี้ยังคงแถวเดิมและใส่ 0 ตู้แล้ว` +
-        `${skippedText}\n\n` +
-        (savedAsNextTemplate ? 'ไฟล์นี้ถูกเก็บเป็นสำเนาทำงานสำหรับสัปดาห์ถัดไปแล้ว โดยแม่แบบสีเดิมยังถูกเก็บแยกและไม่ถูกเขียนทับ' : 'ดาวน์โหลดสำเร็จ แต่บันทึกสำเนาทำงานรอบถัดไปไม่สำเร็จ กรุณาตั้งไฟล์ต้นฉบับสีใหม่')
+        `${skippedText}
+
+` +
+        `ดาวน์โหลดเป็นไฟล์ใหม่ครบ 12 เดือนแล้ว ต้นฉบับหลักยังคงเดิมทุกอย่าง`
       );
       console.log(`Weekly Outbound template updated: sheet=${updateResult.sheetName}, revision=${revisionLabel}, web=${webRecords.length}, plan=${planRecords.length}, combined=${combined.length}, added=${updateResult.added}`);
     }
@@ -5648,18 +5676,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
       const year = Number(currentDate.slice(0,4)) || new Date().getFullYear();
-      const [masterTemplate, template, storedFiles] = await Promise.all([
+      const [masterTemplate, storedFiles] = await Promise.all([
         getStoredWeeklyOutboundMasterTemplateFile(year),
-        getStoredWeeklyOutboundTemplateFile(year),
         getStoredWeeklyOutboundPlanFilesForYear(year)
       ]);
       if(!masterTemplate){
-        alert(`ไฟล์ที่เคยเก็บไว้ก่อนหน้านี้อาจเป็นไฟล์ที่สีหายจากโค้ดเก่า\n\nกรุณากดเลือกไฟล์ Weekly ต้นฉบับจริงปี ${year} ใหม่ 1 ครั้ง ระบบจะเก็บแม่แบบสีแยกไว้และไม่เขียนทับอีก`);
+        alert(`กรุณากด “ตั้งไฟล์ต้นฉบับ Weekly 12 เดือน” แล้วเลือกไฟล์ต้นฉบับปี ${year} ก่อน
+
+ไฟล์ Export จะถูกสร้างแยกและจะไม่เขียนทับต้นฉบับ`);
         weeklyOutboundTemplateInput.value = '';
         weeklyOutboundTemplateInput.click();
         return;
       }
-      const workingTemplate = template || masterTemplate;
       if(!storedFiles.length){
         const ok = confirm('ยังไม่ได้ตั้งไฟล์ STP/PTR สำหรับปีนี้\n\nกด OK เพื่อตั้งไฟล์ STP ของเดือนที่เลือกก่อน หรือ Cancel เพื่อใช้ข้อมูลหน้าเว็บส่งออกอย่างเดียว');
         if(ok){
@@ -5668,7 +5696,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           return;
         }
       }
-      await exportWeeklyOutboundExcel(storedFiles, workingTemplate);
+      await exportWeeklyOutboundExcel(storedFiles, masterTemplate);
     }
 
     async function exportWeeklyInboundExcel(){
