@@ -4607,7 +4607,7 @@ ${fileName}
     function weeklyOutboundActualFormula(rowNumber){
       // Actual Ship ต้องอ้างอิง “คอลัมน์รอบล่าสุดของทั้งชีท” จากวันที่บนหัวตาราง
       // ไม่ย้อนกลับไปหยิบค่ารอบเก่าของแต่ละแถวเมื่อช่องรอบล่าสุดว่าง
-      return `IFERROR(LOOKUP(2,1/($G$2:$W$2<>""),G${rowNumber}:W${rowNumber})+0,0)`;
+      return `IFERROR(LOOKUP(2,1/(G${rowNumber}:W${rowNumber}<>""),G${rowNumber}:W${rowNumber})+0,0)`;
     }
 
     function weeklyOutboundRevisionDate(date=currentDate){
