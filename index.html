@@ -1144,6 +1144,7 @@
     </div>
   </dialog>
 
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <script type="module">
     /*
@@ -4566,6 +4567,388 @@
       catch(_){ return value; }
     }
 
+
+    // บันทึกเฉพาะจุดที่ Weekly Outbound แก้ไข เพื่อเขียนกลับลงไฟล์ .xlsx ต้นฉบับโดยตรง
+    // วิธีนี้เก็บ styles.xml, theme, สี, conditional formatting และองค์ประกอบเดิมของไฟล์ไว้ครบ
+    let weeklyOutboundPatchRecorder = null;
+
+    function weeklyOutboundRecordChangedCell(row, col){
+      if(!weeklyOutboundPatchRecorder) return;
+      weeklyOutboundPatchRecorder.changedCells.add(cellAddr(row, col));
+    }
+
+    function weeklyOutboundStyleKey(cell){
+      if(!cell) return '';
+      try{
+        return JSON.stringify({ s:cell.s ?? null, z:cell.z ?? '' });
+      }catch(_){
+        return '';
+      }
+    }
+
+    function weeklyOutboundCaptureOriginalStyleKeys(ws){
+      const out = {};
+      for(const [addr, cell] of Object.entries(ws || {})){
+        if(addr.startsWith('!') || !/^[A-Z]{1,3}\d+$/.test(addr)) continue;
+        const key = weeklyOutboundStyleKey(cell);
+        if(key) out[addr] = key;
+      }
+      return out;
+    }
+
+    function weeklyOutboundXmlParse(xmlText, label='XML'){
+      const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+      const error = doc.getElementsByTagName('parsererror')[0];
+      if(error) throw new Error(`อ่าน ${label} ไม่สำเร็จ`);
+      return doc;
+    }
+
+    function weeklyOutboundXmlSerialize(doc){
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + new XMLSerializer().serializeToString(doc.documentElement);
+    }
+
+    function weeklyOutboundXmlLocalName(node){
+      return node?.localName || String(node?.nodeName || '').split(':').pop();
+    }
+
+    function weeklyOutboundXmlDirectChildren(parent, localName){
+      return Array.from(parent?.children || []).filter(node => weeklyOutboundXmlLocalName(node) === localName);
+    }
+
+    function weeklyOutboundNormalizeZipPath(baseDir, target){
+      const raw = String(target || '').replace(/\\/g, '/');
+      const combined = raw.startsWith('/') ? raw.slice(1) : `${baseDir || ''}/${raw}`;
+      const parts = [];
+      for(const part of combined.split('/')){
+        if(!part || part === '.') continue;
+        if(part === '..') parts.pop();
+        else parts.push(part);
+      }
+      return parts.join('/');
+    }
+
+    function weeklyOutboundColumnNumberFromLetters(letters){
+      let value = 0;
+      for(const ch of String(letters || '').toUpperCase()){
+        value = value * 26 + (ch.charCodeAt(0) - 64);
+      }
+      return value;
+    }
+
+    function weeklyOutboundSplitCellRef(refText){
+      const match = String(refText || '').match(/^(\$?[A-Z]{1,3})(\$?)(\d+)$/i);
+      if(!match) return null;
+      return {
+        col:match[1].replace('$','').toUpperCase(),
+        absCol:match[1].startsWith('$'),
+        absRow:match[2] === '$',
+        row:Number(match[3])
+      };
+    }
+
+    function weeklyOutboundMakeCellRef(parts, row){
+      return `${parts.absCol ? '$' : ''}${parts.col}${parts.absRow ? '$' : ''}${row}`;
+    }
+
+    function weeklyOutboundShiftRangeTokenRows(token, insertRow, count){
+      const raw = String(token || '');
+      const pieces = raw.split(':');
+      const first = weeklyOutboundSplitCellRef(pieces[0]);
+      const last = weeklyOutboundSplitCellRef(pieces[1] || pieces[0]);
+      if(!first || !last) return raw;
+
+      let startRow = first.row;
+      let endRow = last.row;
+      if(startRow >= insertRow){
+        startRow += count;
+        endRow += count;
+      }else if(endRow >= insertRow){
+        endRow += count;
+      }
+      const startRef = weeklyOutboundMakeCellRef(first, startRow);
+      const endRef = weeklyOutboundMakeCellRef(last, endRow);
+      return pieces.length > 1 ? `${startRef}:${endRef}` : startRef;
+    }
+
+    function weeklyOutboundShiftSqrefRows(value, insertRow, count){
+      return String(value || '').split(/\s+/).filter(Boolean)
+        .map(token => weeklyOutboundShiftRangeTokenRows(token, insertRow, count))
+        .join(' ');
+    }
+
+    function weeklyOutboundXmlShiftRangeAttributes(sheetDoc, insertRow, count){
+      const elements = Array.from(sheetDoc.getElementsByTagName('*'));
+      const refElements = new Set(['dimension','mergeCell','autoFilter','hyperlink','selection']);
+      for(const element of elements){
+        if(element.hasAttribute('sqref')){
+          element.setAttribute('sqref', weeklyOutboundShiftSqrefRows(element.getAttribute('sqref'), insertRow, count));
+        }
+        if(element.hasAttribute('ref') && refElements.has(weeklyOutboundXmlLocalName(element))){
+          element.setAttribute('ref', weeklyOutboundShiftRangeTokenRows(element.getAttribute('ref'), insertRow, count));
+        }
+      }
+    }
+
+    function weeklyOutboundXmlClearCellContent(cellElement){
+      for(const child of Array.from(cellElement.children || [])){
+        const name = weeklyOutboundXmlLocalName(child);
+        if(name === 'f' || name === 'v' || name === 'is') cellElement.removeChild(child);
+      }
+      cellElement.removeAttribute('t');
+      cellElement.removeAttribute('cm');
+      cellElement.removeAttribute('vm');
+    }
+
+    function weeklyOutboundXmlSetRowNumber(rowElement, newRowNumber){
+      rowElement.setAttribute('r', String(newRowNumber));
+      for(const cellElement of weeklyOutboundXmlDirectChildren(rowElement, 'c')){
+        const oldRef = weeklyOutboundSplitCellRef(cellElement.getAttribute('r'));
+        if(oldRef) cellElement.setAttribute('r', `${oldRef.col}${newRowNumber}`);
+      }
+    }
+
+    function weeklyOutboundXmlInsertRows(sheetDoc, insertion){
+      const sheetData = Array.from(sheetDoc.getElementsByTagNameNS('*','sheetData'))[0]
+        || sheetDoc.getElementsByTagName('sheetData')[0];
+      if(!sheetData) throw new Error('ไม่พบ sheetData ในไฟล์ Weekly ต้นฉบับ');
+
+      const insertRow = Number(insertion.insertAt) + 1;
+      const count = Number(insertion.count) || 0;
+      const sourceRowNumber = Number(insertion.sourceRow) + 1;
+      if(count <= 0) return;
+
+      const rowsDescending = weeklyOutboundXmlDirectChildren(sheetData, 'row')
+        .sort((a,b) => Number(b.getAttribute('r') || 0) - Number(a.getAttribute('r') || 0));
+      for(const rowElement of rowsDescending){
+        const oldRow = Number(rowElement.getAttribute('r') || 0);
+        if(oldRow >= insertRow) weeklyOutboundXmlSetRowNumber(rowElement, oldRow + count);
+      }
+
+      const sourceRow = weeklyOutboundXmlDirectChildren(sheetData, 'row')
+        .find(row => Number(row.getAttribute('r') || 0) === sourceRowNumber);
+
+      for(let offset=0; offset<count; offset++){
+        const newRowNumber = insertRow + offset;
+        const rowElement = sourceRow
+          ? sourceRow.cloneNode(true)
+          : sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'row');
+
+        weeklyOutboundXmlSetRowNumber(rowElement, newRowNumber);
+        rowElement.removeAttribute('spans');
+        rowElement.removeAttribute('collapsed');
+        for(const cellElement of weeklyOutboundXmlDirectChildren(rowElement, 'c')){
+          weeklyOutboundXmlClearCellContent(cellElement);
+        }
+
+        const nextRow = weeklyOutboundXmlDirectChildren(sheetData, 'row')
+          .find(row => Number(row.getAttribute('r') || 0) > newRowNumber);
+        if(nextRow) sheetData.insertBefore(rowElement, nextRow);
+        else sheetData.appendChild(rowElement);
+      }
+
+      weeklyOutboundXmlShiftRangeAttributes(sheetDoc, insertRow, count);
+    }
+
+    function weeklyOutboundXmlEnsureRow(sheetDoc, rowNumber){
+      const sheetData = Array.from(sheetDoc.getElementsByTagNameNS('*','sheetData'))[0]
+        || sheetDoc.getElementsByTagName('sheetData')[0];
+      let rowElement = weeklyOutboundXmlDirectChildren(sheetData, 'row')
+        .find(row => Number(row.getAttribute('r') || 0) === rowNumber);
+      if(rowElement) return rowElement;
+
+      rowElement = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'row');
+      rowElement.setAttribute('r', String(rowNumber));
+      const nextRow = weeklyOutboundXmlDirectChildren(sheetData, 'row')
+        .find(row => Number(row.getAttribute('r') || 0) > rowNumber);
+      if(nextRow) sheetData.insertBefore(rowElement, nextRow);
+      else sheetData.appendChild(rowElement);
+      return rowElement;
+    }
+
+    function weeklyOutboundXmlEnsureCell(sheetDoc, addr, styleIdByKey, finalCell){
+      const decoded = XLSX.utils.decode_cell(addr);
+      const rowNumber = decoded.r + 1;
+      const colNumber = decoded.c + 1;
+      const rowElement = weeklyOutboundXmlEnsureRow(sheetDoc, rowNumber);
+      let cellElement = weeklyOutboundXmlDirectChildren(rowElement, 'c')
+        .find(cell => String(cell.getAttribute('r') || '').toUpperCase() === addr.toUpperCase());
+      if(cellElement) return cellElement;
+
+      cellElement = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'c');
+      cellElement.setAttribute('r', addr);
+      const styleKey = weeklyOutboundStyleKey(finalCell);
+      const styleId = styleKey ? styleIdByKey.get(styleKey) : null;
+      if(styleId !== null && styleId !== undefined && styleId !== '') cellElement.setAttribute('s', String(styleId));
+
+      const nextCell = weeklyOutboundXmlDirectChildren(rowElement, 'c').find(cell => {
+        const parts = weeklyOutboundSplitCellRef(cell.getAttribute('r'));
+        return parts && weeklyOutboundColumnNumberFromLetters(parts.col) > colNumber;
+      });
+      if(nextCell) rowElement.insertBefore(cellElement, nextCell);
+      else rowElement.appendChild(cellElement);
+      return cellElement;
+    }
+
+    function weeklyOutboundXmlApplyCell(sheetDoc, addr, finalCell, styleIdByKey){
+      const cellElement = weeklyOutboundXmlEnsureCell(sheetDoc, addr, styleIdByKey, finalCell);
+      weeklyOutboundXmlClearCellContent(cellElement);
+
+      if(finalCell?.f){
+        const formula = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'f');
+        formula.textContent = String(finalCell.f).replace(/^=/, '');
+        cellElement.appendChild(formula);
+        return;
+      }
+
+      const value = finalCell?.v;
+      if(value === null || value === undefined || value === '') return;
+
+      if(finalCell?.t === 'b' || typeof value === 'boolean'){
+        cellElement.setAttribute('t','b');
+        const v = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'v');
+        v.textContent = value ? '1' : '0';
+        cellElement.appendChild(v);
+        return;
+      }
+
+      if(finalCell?.t === 'n' || typeof value === 'number'){
+        const v = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'v');
+        v.textContent = Number.isFinite(Number(value)) ? String(Number(value)) : '0';
+        cellElement.appendChild(v);
+        return;
+      }
+
+      cellElement.setAttribute('t','inlineStr');
+      const is = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'is');
+      const t = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 't');
+      const stringValue = String(value);
+      if(/^\s|\s$|\n/.test(stringValue)) t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
+      t.textContent = stringValue;
+      is.appendChild(t);
+      cellElement.appendChild(is);
+    }
+
+    function weeklyOutboundXmlReplaceMerges(sheetDoc, merges){
+      let mergeCells = Array.from(sheetDoc.getElementsByTagNameNS('*','mergeCells'))[0]
+        || sheetDoc.getElementsByTagName('mergeCells')[0];
+      const list = Array.isArray(merges) ? merges : [];
+
+      if(!list.length){
+        if(mergeCells?.parentNode) mergeCells.parentNode.removeChild(mergeCells);
+        return;
+      }
+
+      if(!mergeCells){
+        mergeCells = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'mergeCells');
+        const sheetData = Array.from(sheetDoc.getElementsByTagNameNS('*','sheetData'))[0]
+          || sheetDoc.getElementsByTagName('sheetData')[0];
+        if(sheetData?.nextSibling) sheetData.parentNode.insertBefore(mergeCells, sheetData.nextSibling);
+        else sheetDoc.documentElement.appendChild(mergeCells);
+      }
+
+      while(mergeCells.firstChild) mergeCells.removeChild(mergeCells.firstChild);
+      for(const merge of list){
+        const item = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, 'mergeCell');
+        item.setAttribute('ref', XLSX.utils.encode_range(merge));
+        mergeCells.appendChild(item);
+      }
+      mergeCells.setAttribute('count', String(list.length));
+    }
+
+    function weeklyOutboundXmlSetSimpleRef(sheetDoc, localName, refValue){
+      if(!refValue) return;
+      let element = Array.from(sheetDoc.getElementsByTagNameNS('*',localName))[0]
+        || sheetDoc.getElementsByTagName(localName)[0];
+      if(!element && localName === 'autoFilter'){
+        element = sheetDoc.createElementNS(sheetDoc.documentElement.namespaceURI, localName);
+        const mergeCells = Array.from(sheetDoc.getElementsByTagNameNS('*','mergeCells'))[0]
+          || sheetDoc.getElementsByTagName('mergeCells')[0];
+        const sheetData = Array.from(sheetDoc.getElementsByTagNameNS('*','sheetData'))[0]
+          || sheetDoc.getElementsByTagName('sheetData')[0];
+        const anchor = mergeCells || sheetData;
+        if(anchor?.nextSibling) anchor.parentNode.insertBefore(element, anchor.nextSibling);
+        else sheetDoc.documentElement.appendChild(element);
+      }
+      if(element) element.setAttribute('ref', refValue);
+    }
+
+    function weeklyOutboundXmlBuildStyleMap(sheetDoc, originalStyleKeys){
+      const styleIdByKey = new Map();
+      const cells = Array.from(sheetDoc.getElementsByTagNameNS('*','c'));
+      for(const cellElement of cells){
+        const addr = String(cellElement.getAttribute('r') || '').toUpperCase();
+        const key = originalStyleKeys?.[addr];
+        if(!key || styleIdByKey.has(key)) continue;
+        styleIdByKey.set(key, cellElement.getAttribute('s') || '0');
+      }
+      return styleIdByKey;
+    }
+
+    function weeklyOutboundXmlUpdateCalcProperties(workbookDoc){
+      let calcPr = Array.from(workbookDoc.getElementsByTagNameNS('*','calcPr'))[0]
+        || workbookDoc.getElementsByTagName('calcPr')[0];
+      if(!calcPr){
+        calcPr = workbookDoc.createElementNS(workbookDoc.documentElement.namespaceURI, 'calcPr');
+        workbookDoc.documentElement.appendChild(calcPr);
+      }
+      calcPr.setAttribute('calcMode','auto');
+      calcPr.setAttribute('fullCalcOnLoad','1');
+      calcPr.setAttribute('forceFullCalc','1');
+    }
+
+    async function weeklyOutboundWritePreservingTemplateStyles(templateBuffer, workbook, sheetName, patchRecorder, originalStyleKeys){
+      const JSZipLib = window.JSZip;
+      if(!JSZipLib) throw new Error('โหลด JSZip ไม่สำเร็จ จึงยังรักษาสีของไฟล์ต้นฉบับไม่ได้');
+
+      const zip = await JSZipLib.loadAsync(templateBuffer);
+      const workbookPath = 'xl/workbook.xml';
+      const workbookRelsPath = 'xl/_rels/workbook.xml.rels';
+      const workbookFile = zip.file(workbookPath);
+      const relsFile = zip.file(workbookRelsPath);
+      if(!workbookFile || !relsFile) throw new Error('โครงสร้างไฟล์ Weekly ต้นฉบับไม่ครบ');
+
+      const workbookDoc = weeklyOutboundXmlParse(await workbookFile.async('string'), 'workbook.xml');
+      const relsDoc = weeklyOutboundXmlParse(await relsFile.async('string'), 'workbook relationships');
+      const sheetNodes = Array.from(workbookDoc.getElementsByTagNameNS('*','sheet'));
+      const sheetNode = sheetNodes.find(node => node.getAttribute('name') === sheetName);
+      if(!sheetNode) throw new Error(`ไม่พบชีท ${sheetName} ในไฟล์ต้นฉบับ`);
+
+      const relId = sheetNode.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id')
+        || sheetNode.getAttribute('r:id');
+      const relationship = Array.from(relsDoc.getElementsByTagNameNS('*','Relationship'))
+        .find(node => node.getAttribute('Id') === relId);
+      if(!relationship) throw new Error(`ไม่พบตำแหน่งไฟล์ของชีท ${sheetName}`);
+
+      const sheetPath = weeklyOutboundNormalizeZipPath('xl', relationship.getAttribute('Target'));
+      const sheetFile = zip.file(sheetPath);
+      if(!sheetFile) throw new Error(`ไม่พบ ${sheetPath} ในไฟล์ Weekly ต้นฉบับ`);
+
+      const sheetDoc = weeklyOutboundXmlParse(await sheetFile.async('string'), `${sheetName}.xml`);
+      const styleIdByKey = weeklyOutboundXmlBuildStyleMap(sheetDoc, originalStyleKeys);
+      for(const insertion of (patchRecorder?.insertions || [])){
+        weeklyOutboundXmlInsertRows(sheetDoc, insertion);
+      }
+
+      const finalWs = workbook.Sheets[sheetName];
+      for(const addr of (patchRecorder?.changedCells || [])){
+        weeklyOutboundXmlApplyCell(sheetDoc, addr, finalWs?.[addr], styleIdByKey);
+      }
+      weeklyOutboundXmlReplaceMerges(sheetDoc, finalWs?.['!merges'] || []);
+      weeklyOutboundXmlSetSimpleRef(sheetDoc, 'dimension', finalWs?.['!ref'] || 'A1');
+      weeklyOutboundXmlSetSimpleRef(sheetDoc, 'autoFilter', finalWs?.['!autofilter']?.ref || '');
+      weeklyOutboundXmlUpdateCalcProperties(workbookDoc);
+
+      zip.file(sheetPath, weeklyOutboundXmlSerialize(sheetDoc));
+      zip.file(workbookPath, weeklyOutboundXmlSerialize(workbookDoc));
+      if(zip.file('xl/calcChain.xml')) zip.remove('xl/calcChain.xml');
+
+      return await zip.generateAsync({
+        type:'arraybuffer',
+        compression:'DEFLATE',
+        compressionOptions:{ level:6 }
+      });
+    }
+
     function weeklyOutboundSetValue(ws, row, col, value, type=null, styleSourceCell=null){
       const addr = cellAddr(row, col);
       const cell = ws[addr] || {};
@@ -4576,6 +4959,7 @@
       delete cell.f;
       delete cell.w;
       ws[addr] = cell;
+      weeklyOutboundRecordChangedCell(row, col);
       return cell;
     }
 
@@ -4589,6 +4973,7 @@
       delete cell.v;
       delete cell.w;
       ws[addr] = cell;
+      weeklyOutboundRecordChangedCell(row, col);
       return cell;
     }
 
@@ -4601,6 +4986,7 @@
       delete cell.w;
       cell.t = 's';
       ws[addr] = cell;
+      weeklyOutboundRecordChangedCell(row, col);
     }
 
     function weeklyOutboundCellDateISO(cell){
@@ -4727,6 +5113,13 @@
 
     function weeklyOutboundInsertRows(ws, insertAt, count, styleSourceRow){
       if(count <= 0) return;
+      if(weeklyOutboundPatchRecorder){
+        weeklyOutboundPatchRecorder.insertions.push({
+          insertAt,
+          count,
+          sourceRow:Math.max(0, styleSourceRow ?? (insertAt - 1))
+        });
+      }
       const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:AB1');
       for(let r=range.e.r; r>=insertAt; r--){
         for(let c=range.s.c; c<=range.e.c; c++){
@@ -4908,6 +5301,7 @@
 
     function updateWeeklyOutboundTemplateWorkbook(workbook, year, monthIndex, allRows, revisionDate){
       let sheetName = findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex);
+      const createdSheet = !sheetName;
       if(!sheetName){
         const created = createWeeklyOutboundSheet(year, monthIndex, [], revisionDate);
         sheetName = sheetNameSafe(`${MONTH_SHORT_EN[monthIndex].toUpperCase()} ${year}`);
@@ -4922,7 +5316,7 @@
         fullCalcOnLoad:true,
         forceFullCalc:true
       };
-      return { ...result, sheetName };
+      return { ...result, sheetName, createdSheet };
     }
 
     function downloadArrayBuffer(buffer, filename){
@@ -5090,17 +5484,44 @@
         return;
       }
 
+      const sourceSheetName = findWeeklyOutboundTemplateSheetName(workbook, year, monthIndex);
+      const originalStyleKeys = sourceSheetName
+        ? weeklyOutboundCaptureOriginalStyleKeys(workbook.Sheets[sourceSheetName])
+        : {};
+      const patchRecorder = { changedCells:new Set(), insertions:[] };
+
       let updateResult;
+      weeklyOutboundPatchRecorder = patchRecorder;
       try{
         updateResult = updateWeeklyOutboundTemplateWorkbook(workbook, year, monthIndex, combined, revisionDate);
       }catch(err){
         console.error(err);
         alert(`อัปเดต Weekly ต้นฉบับไม่สำเร็จ\n${err?.message || err}`);
         return;
+      }finally{
+        weeklyOutboundPatchRecorder = null;
       }
 
       const outputName = `Weekly Outbound Plan ${year}.xlsx`;
-      const outputBuffer = XLSX.write(workbook, { bookType:'xlsx', type:'array', cellStyles:true, bookSST:false });
+      let outputBuffer;
+      try{
+        if(updateResult.createdSheet){
+          // ชีทที่ไม่มีในต้นฉบับไม่มีรูปแบบเดิมให้คัดลอก จึงสร้างตามรูปแบบมาตรฐานของระบบ
+          outputBuffer = XLSX.write(workbook, { bookType:'xlsx', type:'array', cellStyles:true, bookSST:false });
+        }else{
+          outputBuffer = await weeklyOutboundWritePreservingTemplateStyles(
+            templateBuffer,
+            workbook,
+            updateResult.sheetName,
+            patchRecorder,
+            originalStyleKeys
+          );
+        }
+      }catch(err){
+        console.error(err);
+        alert(`สร้างไฟล์ Weekly โดยรักษาสีต้นฉบับไม่สำเร็จ\n${err?.message || err}\n\nระบบหยุด Export เพื่อไม่ให้ได้ไฟล์สีหาย`);
+        return;
+      }
       let savedAsNextTemplate = true;
       try{
         await saveWeeklyOutboundTemplateBuffer(year, outputBuffer, outputName);
