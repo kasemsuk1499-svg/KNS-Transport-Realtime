@@ -4618,6 +4618,44 @@ ${fileName}
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
 
+    function weeklyOutboundRevisionWeek(date=currentDate){
+      const end = jsDateFromISO(weeklyOutboundRevisionDate(date));
+      const start = new Date(end);
+      start.setDate(start.getDate() - 6);
+      const toISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return {
+        startISO:toISO(start),
+        endISO:toISO(end),
+        startTime:start.getTime(),
+        endTime:end.getTime() + 86400000 - 1
+      };
+    }
+
+    function weeklyOutboundUpdatedMonthIndexes(storedFiles, webRows, year, date=currentDate){
+      const week = weeklyOutboundRevisionWeek(date);
+      const months = new Set();
+
+      // ไฟล์ STP/PTR จะปลดล็อกให้แก้เฉพาะเดือนที่ถูกตั้งไฟล์ใหม่ในรอบสัปดาห์นี้
+      for(const file of storedFiles || []){
+        const savedAt = num(file?.savedAt);
+        const monthKey = String(file?.monthKey || '').trim();
+        if(!savedAt || savedAt < week.startTime || savedAt > week.endTime) continue;
+        if(!monthKey.startsWith(`${year}-`)) continue;
+        const monthIndex = Number(monthKey.slice(5,7)) - 1;
+        if(Number.isInteger(monthIndex) && monthIndex >= 0 && monthIndex <= 11) months.add(monthIndex);
+      }
+
+      // งานที่บันทึกในหน้า “ส่งออก” ภายในสัปดาห์ ถือเป็นการอัปเดตของเดือนนั้นด้วย
+      for(const row of webRows || []){
+        const iso = String(row?.date || '').trim();
+        if(iso < week.startISO || iso > week.endISO || !iso.startsWith(`${year}-`)) continue;
+        const monthIndex = Number(iso.slice(5,7)) - 1;
+        if(Number.isInteger(monthIndex) && monthIndex >= 0 && monthIndex <= 11) months.add(monthIndex);
+      }
+
+      return { monthIndexes:Array.from(months).sort((a,b) => a - b), week };
+    }
+
     function cloneExcelObject(value){
       if(!value || typeof value !== 'object') return value;
       try{ return JSON.parse(JSON.stringify(value)); }
@@ -5611,15 +5649,11 @@ ${fileName}
         return;
       }
 
-      // อัปเดตทุกเดือนที่พบวันที่อ้างอิงอยู่ในข้อมูลทั้งปี ไม่จำกัดเฉพาะเดือนที่กำลังเปิดหน้าเว็บ
-      // และคงอัปเดตเดือนที่เลือกไว้ด้วย เพื่อรักษาพฤติกรรมเดิมกรณีต้องใส่ 0 ในรอบล่าสุด
-      const monthsWithReferences = new Set(
-        combined
-          .map(row => Number(String(row?.date || '').slice(5,7)) - 1)
-          .filter(value => Number.isInteger(value) && value >= 0 && value <= 11)
-      );
-      monthsWithReferences.add(monthIndex);
-      const monthIndexesToUpdate = Array.from(monthsWithReferences).sort((a,b) => a - b);
+      // อัปเดตเฉพาะเดือนที่มีความเคลื่อนไหวในรอบสัปดาห์นี้เท่านั้น
+      // เดือนที่ไม่มีไฟล์ STP/PTR ใหม่และไม่มีงานส่งออกจริงในสัปดาห์ จะถือว่าสมบูรณ์
+      // และคงชีทของเดือนนั้นจากต้นฉบับไว้ทั้งเดือนโดยไม่สร้าง Revise/ใส่ศูนย์เพิ่ม
+      const weeklyUpdateScope = weeklyOutboundUpdatedMonthIndexes(storedFiles, webRows, year, currentDate);
+      const monthIndexesToUpdate = weeklyUpdateScope.monthIndexes;
       const sheetUpdates = [];
 
       try{
@@ -5692,13 +5726,16 @@ ${err?.message || err}
       });
       const totalMatched = sheetUpdates.reduce((sum, item) => sum + item.matched, 0);
       const totalAdded = sheetUpdates.reduce((sum, item) => sum + item.added, 0);
+      const updateSummary = updateLines.length
+        ? updateLines.join('\n')
+        : 'ไม่มีเดือนที่อัปเดตในสัปดาห์นี้ — คงต้นฉบับ Weekly ครบทั้ง 12 เดือนไว้';
       alert(
-        `อัปเดตข้อมูลอ้างอิงทั้งปีสำเร็จ ${sheetUpdates.length} เดือน
+        `ตรวจข้อมูล Weekly สำเร็จ • อัปเดต ${sheetUpdates.length} เดือน
 ` +
-        `รอบวันที่ ${revisionDate}
+        `รอบสัปดาห์ ${weeklyUpdateScope.week.startISO} ถึง ${weeklyUpdateScope.week.endISO}
 
 ` +
-        `${updateLines.join('\n')}
+        `${updateSummary}
 
 ` +
         `รวมจับคู่แถวเดิม ${totalMatched} รายการ • เพิ่มแถวใหม่ ${totalAdded} รายการ
