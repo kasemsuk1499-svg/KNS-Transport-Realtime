@@ -3974,8 +3974,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return (mt * 1000) / factor / containerCount;
     }
 
+    function weeklyOutboundMixedKnsStpInfo(obj, loadNormalized=''){
+      const loadText = String(loadNormalized || '').toUpperCase();
+      const hasKns = /\bKNS\b/.test(loadText);
+      const hasStp = /\bSTP\b/.test(loadText);
+      if(!(hasKns && hasStp)) return null;
+
+      // KNS&STP: ให้ยึด "KNS = x FCL" เป็นจำนวนตู้ที่เข้า Weekly
+      // แต่จำนวนที่ใช้หาร Quantity (MT) ต้องเป็นจำนวนตู้รวมทั้งบุ๊ค เช่น KNS 1 + STP 4 = 5 FCL
+      const allText = Object.values(obj || {})
+        .map(value => String(value ?? '').trim())
+        .filter(Boolean)
+        .join(' | ')
+        .replace(/\s+/g, ' ');
+
+      const readFcl = (label) => {
+        const patterns = [
+          new RegExp(`\\b${label}\\b\\s*(?:=|:|-)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:FCL|ตู้)\\b`, 'i'),
+          new RegExp(`\\b${label}\\b[^|]{0,30}?(\\d+(?:\\.\\d+)?)\\s*(?:FCL|ตู้)\\b`, 'i')
+        ];
+        for(const re of patterns){
+          const m = allText.match(re);
+          if(m) return num(m[1]);
+        }
+        return 0;
+      };
+
+      const knsFcl = readFcl('KNS');
+      const stpFcl = readFcl('STP');
+      return {
+        knsFcl,
+        stpFcl,
+        explicitTotalFcl:num(knsFcl) + num(stpFcl),
+        allText
+      };
+    }
+
     function parseWeeklyOutboundPlanObjects(objects, fileName='', side='', sourceScope=''){
       const records = [];
+      const mixedCandidates = [];
+
       for(const [objectIndex, obj] of Array.from(objects || []).entries()){
         const krtPlanStatus = String(getCSVField(obj, ['KRT Plan Status']) || '').trim();
         const stpPlan = String(getCSVField(obj, ['STP Plan']) || '').trim();
@@ -3984,9 +4022,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         const loadText = getCSVField(obj, ['Load']);
         const loadNormalized = String(loadText || '').toUpperCase().replace(/\s+/g, ' ');
-        // ดึงเฉพาะงาน KNS เท่านั้น และถ้าช่อง Load มีคำว่า STP ให้ตัดออกเลยตามไฟล์ STP1
-        if(!/KNS/.test(loadNormalized)) continue;
-        if(/\bSTP\b/.test(loadNormalized)) continue;
+        const hasKns = /\bKNS\b/.test(loadNormalized);
+        const hasStp = /\bSTP\b/.test(loadNormalized);
+        const mixedInfo = weeklyOutboundMixedKnsStpInfo(obj, loadNormalized);
+
+        // Weekly Outbound ใช้งาน KNS เท่านั้น
+        if(!hasKns) continue;
+        // ถ้าเป็น KNS&STP ต้องมีข้อความบอกจำนวน KNS เช่น "KNS = 1 FCL"
+        // เพื่อกันการนับตู้ STP เข้ามาเกินจริง
+        if(hasStp && (!mixedInfo || !num(mixedInfo.knsFcl))){
+          console.warn('ข้าม KNS&STP เพราะไม่พบจำนวน KNS FCL ชัดเจน', { fileName, side, obj });
+          continue;
+        }
 
         const productRaw = getCSVField(obj, ['Product']);
         const productName = normalizeOutboundProductDisplay(productRaw);
@@ -4003,15 +4050,75 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const booking = String(getCSVField(obj, ['Booking'])).trim();
         const etd = String(getCSVField(obj, ['ETD'])).replace(/\s+/g, ' ').trim();
         const topic = String(getCSVField(obj, ['ชื่อเรื่อง', 'Subject'])).trim();
+        const totalMTInSourceRow = sumMultilineNumericCell(quantityMT);
+        const groupScope = sourceScope || fileName || side || 'PLAN';
 
-        // ถ้ามีหลายวันในเซลล์เดียว เช่น 16/07/2026 - 3 FCL และ 17/07/2026 - 4 FCL
+        if(mixedInfo){
+          // ตัวอย่าง: Load = KNS&STP, หมายเหตุ = KNS = 1 FCL / STP = 4 FCL
+          // Weekly ต้องลงเพียง 1 ตู้ KNS แต่ Remark/จำนวนถุงต่อตู้ยังหารด้วยตู้รวมทั้งบุ๊ค 5 ตู้
+          const dateTotalFcl = dateFcls.reduce((sum, item) => sum + num(item.fcl), 0);
+          const totalFclInBook = num(mixedInfo.explicitTotalFcl) || dateTotalFcl;
+          const knsFclInBook = Math.min(num(mixedInfo.knsFcl), totalFclInBook || num(mixedInfo.knsFcl));
+          if(!knsFclInBook || !totalFclInBook) continue;
+
+          // ใน 1 บุ๊คอาจมีหลายแป้งหลายบรรทัด ให้รวมภายหลังเป็นชื่อเดียวคั่นด้วย " / "
+          // Booking เป็นตัวระบุบุ๊คหลัก ถ้าไม่มี Booking จึง fallback ไปใช้ข้อมูลวันที่/ETD/จำนวนตู้แทน
+          const bookIdentity = booking
+            ? `BOOKING:${booking.toUpperCase()}`
+            : [
+                groupScope,
+                String(dateLoadText || '').replace(/\s+/g,' ').trim(),
+                etd,
+                topic,
+                `KNS:${formatWeeklyQty(knsFclInBook)}`,
+                `TOTAL:${formatWeeklyQty(totalFclInBook)}`
+              ].join('|');
+
+          // ถ้ามีหลายวัน ให้กระจายเฉพาะจำนวนตู้ KNS ไปตามลำดับวัน โดยห้ามเกิน FCL ของวันนั้น
+          let remainingKns = knsFclInBook;
+          const knsDates = [];
+          for(const item of dateFcls){
+            if(remainingKns <= 0) break;
+            const fclForDate = Math.min(num(item.fcl), remainingKns);
+            if(fclForDate > 0){
+              knsDates.push({ date:item.date, fcl:fclForDate });
+              remainingKns -= fclForDate;
+            }
+          }
+          // เผื่อ Date Load ไม่มี FCL มากพอ แต่มี KNS FCL ระบุชัด ให้คงจำนวนส่วนที่เหลือไว้ในวันแรก
+          if(remainingKns > 0 && dateFcls[0]?.date){
+            const first = knsDates.find(x => x.date === dateFcls[0].date);
+            if(first) first.fcl += remainingKns;
+            else knsDates.push({ date:dateFcls[0].date, fcl:remainingKns });
+          }
+
+          mixedCandidates.push({
+            objectIndex,
+            bookIdentity,
+            productName,
+            refName:productName,
+            type,
+            quantityMT:totalMTInSourceRow,
+            totalFclInBook,
+            knsFclInBook,
+            knsDates,
+            booking,
+            source:'FILE',
+            side,
+            sourceFile:fileName,
+            etd,
+            topic,
+            mixedText:mixedInfo.allText
+          });
+          continue;
+        }
+
+        // KNS ปกติ: ถ้ามีหลายวันในเซลล์เดียว เช่น 16/07/2026 - 3 FCL และ 17/07/2026 - 4 FCL
         // ต้องรวมเป็น 7 FCL ก่อน แล้วใช้ Quantity (MT) หารด้วย 7 ตู้เพียงครั้งเดียว
         // หลังคำนวณเสร็จจึงแยกกลับเป็น 3 ตู้และ 4 ตู้ตามวัน โดยใช้ Remark เดียวกันทั้งสองวัน
         const totalFclInSourceRow = dateFcls.reduce((sum, item) => sum + num(item.fcl), 0);
-        const totalMTInSourceRow = sumMultilineNumericCell(quantityMT);
         const sharedQtyPerContainer = weeklyQtyPerContainerFromMT(totalMTInSourceRow, type, totalFclInSourceRow);
         const sharedRemark = weeklyOutboundLoadRemark(type, sharedQtyPerContainer);
-        const groupScope = sourceScope || fileName || side || 'PLAN';
         const planGroupKey = [
           groupScope,
           objectIndex,
@@ -4046,6 +4153,88 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           });
         }
       }
+
+      // รวมหลายแป้งใน KNS&STP ที่อยู่ "บุ๊คเดียวกัน" เป็นแถวเดียว
+      // เช่น HP-FL T0402 / STABI-V T0560 และนับจำนวนตู้ KNS เพียงครั้งเดียว
+      const mixedGroups = new Map();
+      for(const item of mixedCandidates){
+        // Weekly มี Type แยก PP/JB จึงรวมชื่อภายใน Packing Type เดียวกัน
+        const key = `${item.bookIdentity}|TYPE:${item.type}`;
+        if(!mixedGroups.has(key)){
+          mixedGroups.set(key, {
+            key,
+            bookIdentity:item.bookIdentity,
+            names:[],
+            nameKeys:new Set(),
+            type:item.type,
+            totalMT:0,
+            totalFclInBook:0,
+            knsFclInBook:0,
+            dates:new Map(),
+            booking:item.booking,
+            side:item.side,
+            sourceFile:item.sourceFile,
+            etds:new Set(),
+            topics:new Set()
+          });
+        }
+        const group = mixedGroups.get(key);
+        const productKey = normalizeWeeklyOutboundProductKey(item.productName);
+        if(productKey && !group.nameKeys.has(productKey)){
+          group.nameKeys.add(productKey);
+          group.names.push(item.productName);
+        }
+        group.totalMT += num(item.quantityMT);
+        group.totalFclInBook = Math.max(group.totalFclInBook, num(item.totalFclInBook));
+        group.knsFclInBook = Math.max(group.knsFclInBook, num(item.knsFclInBook));
+        for(const day of item.knsDates || []){
+          group.dates.set(day.date, Math.max(num(group.dates.get(day.date)), num(day.fcl)));
+        }
+        if(item.etd) group.etds.add(item.etd);
+        if(item.topic) group.topics.add(item.topic);
+      }
+
+      for(const group of mixedGroups.values()){
+        const combinedName = group.names.filter(Boolean).join(' / ');
+        if(!combinedName) continue;
+        const denominatorFcl = num(group.totalFclInBook) || Array.from(group.dates.values()).reduce((sum,v) => sum + num(v), 0);
+        const qtyPerContainer = weeklyQtyPerContainerFromMT(group.totalMT, group.type, denominatorFcl);
+        const sharedRemark = weeklyOutboundLoadRemark(group.type, qtyPerContainer);
+        const planGroupKey = `MIXED_KNS_STP|${group.key}`;
+        const detailRemark = [
+          group.booking ? `Booking: ${group.booking}` : '',
+          `KNS&STP: KNS ${formatWeeklyQty(group.knsFclInBook)} FCL / รวม ${formatWeeklyQty(denominatorFcl)} FCL`,
+          Array.from(group.etds).filter(Boolean).join(' / '),
+          Array.from(group.topics).filter(Boolean).join(' / '),
+          group.side || '',
+          group.sourceFile ? `จากไฟล์: ${group.sourceFile}` : ''
+        ].filter(Boolean).join(' / ');
+
+        for(const [date, fcl] of group.dates.entries()){
+          if(!fcl) continue;
+          records.push({
+            date,
+            productName:combinedName,
+            refName:combinedName,
+            type:group.type,
+            qty:fcl,                 // จำนวนที่ลง Weekly = เฉพาะตู้ KNS
+            fclCount:fcl,
+            quantityMT:group.totalMT,
+            planGroupKey,
+            groupQuantityMT:group.totalMT,
+            groupTotalFcl:denominatorFcl, // ตัวหาร Remark = ตู้รวมทั้งบุ๊ค KNS+STP
+            qtyPerContainer,
+            booking:group.booking,
+            source:'FILE',
+            side:group.side,
+            sourceFile:group.sourceFile,
+            remark:sharedRemark,
+            detailRemark,
+            mixedKnsStp:true
+          });
+        }
+      }
+
       return records;
     }
 
@@ -4416,6 +4605,9 @@ ${fileName}
             refName:normalizeOutboundProductDisplay(rec.refName || rec.productName),
             type,
             quantityMT:num(rec.groupQuantityMT ?? rec.quantityMT),
+            // ปกติ denominatorFcl = จำนวน FCL ของแถวต้นทาง
+            // KNS&STP จะใช้จำนวนตู้รวมทั้งบุ๊ค (KNS+STP) แม้ qty ที่ลง Weekly จะเป็นเฉพาะ KNS
+            denominatorFcl:num(rec.groupTotalFcl ?? rec.totalFcl ?? 0),
             dates:new Map(),
             months:new Set(),
             remarks:new Set(),
@@ -4475,6 +4667,7 @@ ${fileName}
             refName:group.refName,
             type:group.type,
             totalMT:0,
+            denominatorFcl:0,
             dates:new Map(),
             remarks:new Set(),
             details:new Set(),
@@ -4484,6 +4677,7 @@ ${fileName}
         }
         const component = components.get(root);
         component.totalMT += num(group.quantityMT);
+        component.denominatorFcl += num(group.denominatorFcl) || Array.from(group.dates.values()).reduce((sum, value) => sum + num(value), 0);
         for(const [date, fcl] of group.dates.entries()){
           component.dates.set(date, num(component.dates.get(date)) + num(fcl));
         }
@@ -4497,7 +4691,8 @@ ${fileName}
 
       const dailyRecords = [];
       for(const component of components.values()){
-        const totalFcl = Array.from(component.dates.values()).reduce((sum, value) => sum + num(value), 0);
+        const weeklyFcl = Array.from(component.dates.values()).reduce((sum, value) => sum + num(value), 0);
+        const totalFcl = num(component.denominatorFcl) || weeklyFcl;
         const qtyPerContainer = weeklyQtyPerContainerFromMT(component.totalMT, component.type, totalFcl);
         const sharedRemark = weeklyOutboundLoadRemark(component.type, qtyPerContainer);
         const sharedDetail = Array.from(component.details).filter(Boolean).join(' / ');
