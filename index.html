@@ -5554,7 +5554,7 @@ ${fileName}
         weeklyOutboundSetFormula(ws, block.start, layout.jbCol, `SUMIF($F${excelStart}:$F${excelEnd},"JB",X${excelStart}:X${excelEnd})`, ws[cellAddr(block.start, layout.jbCol)]);
         weeklyOutboundSetFormula(ws, block.start, layout.ppCol, `SUMIF($F${excelStart}:$F${excelEnd},"PP",X${excelStart}:X${excelEnd})`, ws[cellAddr(block.start, layout.ppCol)]);
         weeklyOutboundSetFormula(ws, block.start, layout.totalCol, `Y${excelStart}+Z${excelStart}`, ws[cellAddr(block.start, layout.totalCol)]);
-        weeklyOutboundSetFormula(ws, block.start, layout.statusCol, `IF(AA${excelStart}=0,"ไม่มีโหลดสินค้า","")`, ws[cellAddr(block.start, layout.statusCol)]);
+        weeklyOutboundSetFormula(ws, block.start, layout.statusCol, `IF(AA${excelStart}=0,"ไม่มีโหลด","")`, ws[cellAddr(block.start, layout.statusCol)]);
 
         if(block.end > block.start){
           for(const c of dataMergeCols){
@@ -5773,7 +5773,7 @@ ${fileName}
         setFormula(ws, start, 24, `SUMIF($F${excelStart}:$F${excelEnd},"JB",X${excelStart}:X${excelEnd})`, formulaStyle);
         setFormula(ws, start, 25, `SUMIF($F${excelStart}:$F${excelEnd},"PP",X${excelStart}:X${excelEnd})`, formulaStyle);
         setFormula(ws, start, 26, `Y${excelStart}+Z${excelStart}`, formulaStyle);
-        setFormula(ws, start, 27, `IF(AA${excelStart}=0,"ไม่มีโหลดสินค้า","")`, bodyBold);
+        setFormula(ws, start, 27, `IF(AA${excelStart}=0,"ไม่มีโหลด","")`, bodyBold);
 
         for(let i=0; i<blockRows; i++){
           const r = start + i;
