@@ -3,7 +3,7 @@ export function thaiDate(now=new Date()){
 }
 export function createAudit(db,api){
   const pathOf=r=>decodeURIComponent(new URL(r.toString()).pathname).replace(/^\/+|\/+$/g,'');
-  const ignored=new Set(['updatedAt','createdAt','locationUpdatedAt','locationSyncedAt','tripStatusUpdatedAt']);
+  const ignored=new Set(['location','updatedAt','createdAt','locationUpdatedAt','locationSyncedAt','tripStatusUpdatedAt']);
   async function update(target,values){
     const base=pathOf(target),patch={};
     for(const [key,value] of Object.entries(values))patch[[base,key].filter(Boolean).join('/')]=value;

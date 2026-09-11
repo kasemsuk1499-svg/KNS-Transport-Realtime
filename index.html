@@ -2543,7 +2543,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function renderRows(){
       // ถ้าผู้ใช้กำลังพิมพ์อยู่ ยังไม่ให้ realtime render มาทับข้อความที่ยังไม่ได้กด Enter
-      if(hasPendingEdit() && tbody.contains(document.activeElement)){
+      if(hasPendingEdit()){
         return;
       }
       if(!rowsCache.length){
@@ -2896,7 +2896,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let activeEdit = null;
     function lockCells(){
       tbody.querySelectorAll('input[data-field],textarea[data-field],select[data-field]').forEach(el=>{
-        if(el.tagName==='SELECT')el.disabled=true;else el.readOnly=true;
+        if(el.tagName==='SELECT')el.disabled=true;else el.readOnly=el.dataset.field!=='location'||el.dataset.saving==='1';
       });
       tbody.querySelectorAll('tr').forEach(tr=>{
         const id=tr.querySelector('[data-id]')?.dataset.id;
@@ -2908,6 +2908,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     new MutationObserver(lockCells).observe(tbody,{childList:true,subtree:true});
     function openRowEditor(id){
+      if(hasPendingEdit()){alert('กรุณาบันทึก Location ให้เสร็จก่อนแก้ไขทั้งแถว');return;}
       const row=rowsCache.find(r=>r.id===id);if(!row)return;
       const fields=currentPage===OUTBOUND_PAGE
         ? ['bookingNo','tripNo','location','productName','batchNo','tankCode','sourceQty','bags','packType','kg','inventoryStatus','remark']
@@ -2984,6 +2985,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }catch(err){$('editError').textContent='บันทึกไม่สำเร็จ: '+err.message;}
       finally{$('editSave').disabled=false;$('editCancel').disabled=false;controls.forEach(c=>c.disabled=false);}
     };
+    async function saveInlineLocation(el){
+      if(!el.classList.contains('dirty')||el.dataset.saving==='1')return;
+      const id=el.dataset.id,page=currentPage,date=currentDate,legacy=legacyMode;
+      const value=el.value.trim();
+      el.dataset.saving='1';el.classList.add('saving');el.readOnly=true;
+      try{
+        const base=`${legacy?'knsTransport':`knsTransport/pages/${page}`}/plans/${date}/rows`;
+        const row=(await get(ref(db,`${base}/${id}`))).val();
+        if(!row)throw new Error('ไม่พบแถวนี้แล้ว');
+        const patch={};
+        const putLocation=rowId=>{
+          patch[`${base}/${rowId}/location`]=value;
+          patch[`${base}/${rowId}/locationUpdatedAt`]=serverTimestamp();
+          patch[`${base}/${rowId}/updatedAt`]=serverTimestamp();
+        };
+        putLocation(id);
+        const key=makeProductTankKey(row.productName,row.tankCode);
+        if(key&&page!==OUTBOUND_PAGE){
+          const all=(await get(ref(db,base))).val()||{};
+          for(const [otherId,other] of Object.entries(all))if(makeProductTankKey(other.productName,other.tankCode)===key)putLocation(otherId);
+          patch[`knsTransport/pages/${page}/productTankLocations/${key}`]={productName:row.productName,productKey:normalizedProduct(row.productName),tankCode:normalizedTank(row.tankCode),location:value,updatedAt:serverTimestamp(),page,sourceDate:date};
+        }
+        await update(ref(db),patch);
+        el.classList.remove('dirty');el.title='บันทึก Location แล้ว';
+      }catch(err){el.title='บันทึกไม่สำเร็จ กด Enter เพื่อลองอีกครั้ง';alert('บันทึก Location ไม่สำเร็จ: '+err.message);}
+      finally{delete el.dataset.saving;el.classList.remove('saving');el.readOnly=false;renderRows();}
+    }
+    tbody.addEventListener('input',e=>{
+      const el=e.target.closest('[data-field="location"]');if(!el)return;
+      el.classList.add('dirty');el.title='กด Enter หรือออกจากช่องเพื่อบันทึก Location';
+    });
+    tbody.addEventListener('focusout',e=>{
+      const el=e.target.closest('[data-field="location"]');if(el)saveInlineLocation(el);
+    });
+    tbody.addEventListener('keydown',e=>{
+      const el=e.target.closest('[data-field="location"]');if(!el||e.isComposing)return;
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();saveInlineLocation(el);}
+      if(e.key==='Escape'&&el.dataset.saving!=='1'){el.classList.remove('dirty');renderRows();}
+    });
+    pageTabs.forEach(btn=>btn.addEventListener('click',e=>{
+      if(hasPendingEdit()){e.preventDefault();e.stopImmediatePropagation();alert('กรุณารอให้ Location บันทึกเสร็จก่อนเปลี่ยนหน้า');}
+    },true));
+    dateInput.addEventListener('change',e=>{
+      if(hasPendingEdit()){dateInput.value=currentDate;e.stopImmediatePropagation();alert('กรุณารอให้ Location บันทึกเสร็จก่อนเปลี่ยนวันที่');}
+    },true);
+    window.addEventListener('beforeunload',e=>{if(hasPendingEdit()){e.preventDefault();e.returnValue='';}});
+
     async function duplicateRow(id){
       const row = rowsCache.find(r => r.id === id);
       if(!row) return;
