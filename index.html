@@ -1016,7 +1016,44 @@
     #editControl{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px} #editControl label{display:block;text-align:left;font-weight:600}
     .reports-link{display:inline-block;margin:12px;padding:10px 18px;background:#173e67;color:white;border-radius:8px;text-decoration:none}
     @media print{.row-edit-btn,.reports-link{display:none!important}}
-  </style>
+      #mobileTrips,.mobile-tools-toggle{display:none}
+    @media screen and (max-width:760px){
+      main{display:flex;flex-direction:column;gap:12px;padding:12px!important;min-width:0}
+      main>.status{order:0;margin:0}main>.panel{order:1;margin:0;min-width:0}
+      main>.todo-widget{order:2}main>.empty-locations-widget{order:3}
+      .table-wrap{display:none}
+      #mobileTrips{display:block;padding:12px;min-width:0}
+      .mobile-tools-toggle{display:block;background:#e8eff5;color:#19384c}
+      .controls:not(.show-mobile-tools)>.mobile-extra{display:none!important}
+      .controls{min-width:0}.controls>.page-tabs{width:100%;display:flex}.page-tabs button{flex:1;min-width:0}
+      .controls>label{display:flex;align-items:center;gap:8px}.controls>label input{min-width:0;flex:1;width:100%}
+      input,select,textarea{font-size:16px!important}button{min-height:44px}
+      .panel-head{padding:12px}.panel-head .hint{line-height:1.6}
+      .mobile-trip{border:1px solid var(--line);border-radius:12px;background:white;margin-bottom:12px;overflow:hidden}
+      .mobile-trip>summary{cursor:pointer;list-style:none;padding:16px;display:grid;grid-template-columns:1fr auto;gap:8px;min-height:70px;background:#edf6fb}
+      .mobile-trip>summary::-webkit-details-marker{display:none}
+      .mobile-trip>summary:after{content:'ดูรายละเอียด ⌄';font-size:12px;color:#416375;align-self:center}
+      .mobile-trip[open]>summary:after{content:'ย่อ ⌃'}
+      .mobile-trip-title{font-size:18px;display:block;margin-bottom:6px;overflow-wrap:anywhere}
+      .mobile-trip-sub{font-size:13px;color:#536b7b;line-height:1.6;overflow-wrap:anywhere}
+      .mobile-trip-body{padding:12px}.mobile-item{border:1px solid #dce5ec;border-radius:10px;padding:12px;margin:12px 0;background:#fff}
+      .mobile-item h3{margin:0 0 10px;font-size:16px;overflow-wrap:anywhere}
+      .mobile-facts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
+      .mobile-facts>div{min-width:0}.mobile-facts dt{font-size:12px;color:#60717c}.mobile-facts dd{margin:4px 0 0;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}
+      .mobile-full{grid-column:1/-1}.mobile-location{display:block;color:#334a58;font-weight:700;font-size:13px}
+      .mobile-location textarea{width:100%;min-height:64px;margin:6px 0;background:#fffbe6}
+      .mobile-item-actions{display:flex;justify-content:flex-end;margin-top:8px}.mobile-edit{font-size:14px;background:#334155;color:#fff}
+      .mobile-trip-actions{display:flex;flex-wrap:wrap;gap:8px}.mobile-trip-actions button{flex:1 1 110px;font-size:13px}
+      .mobile-trip-tools{margin-top:12px;border-top:1px solid #e3eaf0;padding-top:12px}.mobile-trip-tools>summary{padding:8px 0;cursor:pointer;font-size:13px}
+      .mobile-item-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+      .mobile-empty{padding:20px;color:#60717c;text-align:center}.mobile-intro{font-size:13px;color:#60717c;margin:0 0 12px}
+      #cellEditDialog{padding:16px}#editControl{grid-template-columns:1fr}
+      body[data-page="PTR"] .mobile-trip>summary{background:#edf8ee}
+      body[data-page="OUT"] .mobile-trip>summary{background:#fff2e3}
+    }
+    @media print{#mobileTrips,.mobile-tools-toggle{display:none!important}}
+
+</style>
 </head>
 <body>
   <a class="reports-link" href="./reports/">📋 รวมรีพอท / บันทึกสิ่งผิดปกติ</a>
@@ -1034,6 +1071,7 @@
           <input type="date" id="dateInput" />
         </label>
         <button id="addRowBtn" class="good">+ เพิ่มคันท้ายสุด</button>
+        <button id="mobileToolsButton" type="button" class="mobile-tools-toggle" aria-expanded="false">เครื่องมือเพิ่มเติม</button>
         <button id="copyYesterdayBtn" class="secondary">คัดลอกจากวันก่อน</button>
         <button id="importBtn" class="light">นำเข้า CSV</button>
         <button id="exportBtn" class="light">ส่งออก CSV ตามแบบ</button>
@@ -1103,11 +1141,12 @@
         <div>
           <span id="syncDot" class="sync-dot"></span>
           <b id="syncText">กำลังเชื่อมต่อ...</b>
-          <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — พิมพ์ให้เสร็จก่อน แล้วกด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึกและซิงก์เรียลไทม์</span>
+          <span class="hint">กำลังดูหน้า <b id="pageName">STP</b> — Location แก้ได้ทันที • ข้อมูลอื่นกดปุ่มแก้ไขแล้วบันทึก</span>
         </div>
         <div class="hint">เลข No. ด้านหน้าคือจำนวนเที่ยวรถที่วิ่ง • Product พิมพ์ค้นหาเลือกจากฐาน CSV ได้ • ช่อง LOCATION พิมพ์เองได้อิสระ • ช่องสีเหลืองอ่อน = ยังไม่บันทึก</div>
       </div>
 
+      <div id="mobileTrips" aria-label="รายการรถสำหรับมือถือ"></div>
       <div class="table-wrap">
         <table>
           <thead id="tableHead">
@@ -2313,12 +2352,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if(!row) return [];
       const trip = normalizedTripNo(row);
       if(!trip) return [row];
-      return rowsCache.filter(r => normalizedTripNo(r) === trip);
+      return rowsCache.filter(r => normalizedTripNo(r) === trip && (currentPage!==OUTBOUND_PAGE || String(r.bookingNo||'').trim()===String(row.bookingNo||'').trim()));
     }
 
     function tripStatusForRow(row){
       const trip = normalizedTripNo(row);
-      const match = trip ? rowsCache.find(r => normalizedTripNo(r) === trip && r.tripStatus) : row;
+      const match = trip ? rowsCache.find(r => normalizedTripNo(r) === trip && r.tripStatus && (currentPage!==OUTBOUND_PAGE || String(r.bookingNo||'').trim()===String(row.bookingNo||'').trim())) : row;
       const value = match?.tripStatus || row?.tripStatus || '';
       return TRIP_STATUS[value] ? value : '';
     }
@@ -3031,6 +3070,89 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if(hasPendingEdit()){dateInput.value=currentDate;e.stopImmediatePropagation();alert('กรุณารอให้ Location บันทึกเสร็จก่อนเปลี่ยนวันที่');}
     },true);
     window.addEventListener('beforeunload',e=>{if(hasPendingEdit()){e.preventDefault();e.returnValue='';}});
+
+    const mobileTrips=$('mobileTrips');
+    const expandedTrips=new Set();
+    function mobileTripKey(row){
+      const trip=String(row.tripNo||row.exportRound||'').trim();
+      return `${currentPage}|${currentDate}|${currentPage===OUTBOUND_PAGE?String(row.bookingNo||'').trim()+'|':''}${trip||'row:'+row.id}`;
+    }
+    function renderMobileTrips(){
+      if(hasPendingEdit())return;
+      if(!tbody.querySelector('[data-id]')){mobileTrips.innerHTML=`<p class="mobile-empty">${escapeHtml(tbody.textContent.trim())}</p>`;return;}
+      const groups=new Map();
+      for(const row of rowsCache){const key=mobileTripKey(row);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}
+      mobileTrips.innerHTML='<p class="mobile-intro">เลือกคันรถเพื่อดูสินค้าและแก้ไขข้อมูล • Location พิมพ์แก้ได้ทันที</p>'+Array.from(groups,([key,rows])=>{
+        const first=rows[0],trip=String(first.tripNo||first.exportRound||'').trim();
+        const title=(currentPage===OUTBOUND_PAGE?'ตู้ที่ ':'คันที่ ')+(trip||'ยังไม่ระบุ');
+        const bags=rows.reduce((s,r)=>s+num(r.bags),0),kg=rows.reduce((s,r)=>s+num(r.kg),0);
+        const status=rows.find(r=>TRIP_STATUS[r.tripStatus])?.tripStatus;
+        const booking=currentPage===OUTBOUND_PAGE?`<div class="mobile-trip-sub">Booking ${escapeHtml(first.bookingNo||'—')}</div>`:'';
+        const facts=(label,value,full=false)=>`<div${full?' class="mobile-full"':''}><dt>${label}</dt><dd>${escapeHtml(value??'—')}</dd></div>`;
+        return `<details class="mobile-trip" data-trip-key="${escapeAttr(key)}" ${expandedTrips.has(key)?'open':''}><summary><div><strong class="mobile-trip-title">${escapeHtml(title)}</strong>${booking}<div class="mobile-trip-sub">${rows.length} รายการ • ${fmt(bags)} ถุง • ${fmt(kg,2)} กก.</div><div class="mobile-trip-sub">${escapeHtml(status?TRIP_STATUS[status].short:'ยังไม่เลือกสถานะ')}</div></div></summary><div class="mobile-trip-body">
+          <div class="mobile-trip-actions"><button type="button" class="good" data-mobile-action="trip-status" data-status="ok" data-row-id="${escapeAttr(first.id)}">ตรงแผน</button><button type="button" class="secondary" data-mobile-action="trip-status" data-status="mismatch" data-row-id="${escapeAttr(first.id)}">ไม่ตรงแผน</button></div>
+          ${rows.map((row,index)=>`<article class="mobile-item"><h3>${index+1}. ${escapeHtml(row.productName||'ยังไม่ระบุสินค้า')}</h3><dl class="mobile-facts">
+            ${facts('แบช',row.batchNo||'—')}${facts('Tank',row.tankCode||'—')}${facts('จำนวนถุง',fmt(num(row.bags)))}${facts('น้ำหนัก (กก.)',fmt(num(row.kg),2))}${facts('ประเภทบรรจุ',row.packType||'—')}
+            ${currentPage===OUTBOUND_PAGE?facts('จำนวนต้นทาง',row.sourceQty||'—')+facts('สถานะสต็อก',row.inventoryStatus||'—'):facts('พาเลท',row.pallets||'—')}
+            ${facts('หมายเหตุ',row.remark||[row.etdText,row.bookingRemark].filter(Boolean).join(' / ')||'—',true)}</dl>
+            <label class="mobile-location">Location<textarea data-mobile-location="${escapeAttr(row.id)}" aria-label="Location ${escapeAttr(row.productName||'รายการ '+(index+1))}">${escapeHtml(formatLocationForEdit(getDisplayLocation(row)))}</textarea></label>
+            <div class="mobile-item-actions"><button type="button" class="mobile-edit" data-mobile-action="edit" data-row-id="${escapeAttr(row.id)}">แก้ไขรายการนี้</button></div>
+            <details class="mobile-trip-tools"><summary>จัดการรายการเพิ่มเติม</summary><div class="mobile-item-tools">${currentPage!==OUTBOUND_PAGE?`<button type="button" class="good" data-mobile-action="insert-item" data-row-id="${escapeAttr(row.id)}">+ รายการ</button>`:''}<button type="button" class="light" data-mobile-action="dup" data-row-id="${escapeAttr(row.id)}">คัดลอก</button><button type="button" class="danger" data-mobile-action="del" data-row-id="${escapeAttr(row.id)}">ลบรายการ</button></div></details></article>`).join('')}
+          <details class="mobile-trip-tools"><summary>จัดการ${currentPage===OUTBOUND_PAGE?'ตู้':'คันรถ'}เพิ่มเติม</summary><div class="mobile-item-tools"><button type="button" class="secondary" data-mobile-action="insert-trip" data-row-id="${escapeAttr(first.id)}">+ ${currentPage===OUTBOUND_PAGE?'ตู้':'คัน'}ถัดไป</button><button type="button" class="light" data-mobile-action="trip-rollover" data-row-id="${escapeAttr(first.id)}">เลื่อนไปวันทำงานถัดไป</button></div></details>
+        </div></details>`;
+      }).join('');
+    }
+    mobileTrips.addEventListener('toggle',e=>{
+      const card=e.target;if(!card.matches('details[data-trip-key]'))return;
+      if(card.open)expandedTrips.add(card.dataset.tripKey);else expandedTrips.delete(card.dataset.tripKey);
+    },true);
+    function desktopLocationFor(id){
+      const row=rowsCache.find(r=>r.id===id);if(!row)return null;
+      const direct=Array.from(tbody.querySelectorAll('[data-field="location"]')).find(el=>el.dataset.id===id);
+      if(direct||currentPage===OUTBOUND_PAGE)return direct;
+      const key=makeProductTankKey(row.productName,row.tankCode);
+      return Array.from(tbody.querySelectorAll('[data-field="location"]')).find(el=>{
+        const other=rowsCache.find(r=>r.id===el.dataset.id);return key&&other&&makeProductTankKey(other.productName,other.tankCode)===key;
+      });
+    }
+    mobileTrips.addEventListener('input',e=>{
+      const el=e.target.closest('[data-mobile-location]');if(!el)return;
+      const source=desktopLocationFor(el.dataset.mobileLocation);if(!source)return;
+      source.value=el.value;source.dispatchEvent(new Event('input',{bubbles:true}));el.classList.add('dirty');
+    });
+    async function saveMobileLocation(el){
+      const source=desktopLocationFor(el.dataset.mobileLocation);if(!source||el.readOnly)return;
+      el.readOnly=true;
+      try{await saveInlineLocation(source);}finally{el.readOnly=false;if(!source.classList.contains('dirty'))el.classList.remove('dirty');}
+    }
+    mobileTrips.addEventListener('focusout',e=>{const el=e.target.closest('[data-mobile-location]');if(el)saveMobileLocation(el);});
+    mobileTrips.addEventListener('keydown',e=>{
+      const el=e.target.closest('[data-mobile-location]');if(!el||e.isComposing)return;
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();saveMobileLocation(el);}
+      if(e.key==='Escape'&&!el.readOnly){const source=desktopLocationFor(el.dataset.mobileLocation);if(source){source.classList.remove('dirty');renderRows();}}
+    });
+    mobileTrips.addEventListener('click',async e=>{
+      const btn=e.target.closest('[data-mobile-action]');if(!btn)return;
+      const {mobileAction:action,rowId:id}=btn.dataset;
+      if(hasPendingEdit()){alert('กรุณารอให้ Location บันทึกเสร็จก่อน');return;}
+      btn.disabled=true;
+      try{
+        if(action==='edit')openRowEditor(id);
+        if(action==='trip-status')await setTripStatus(id,btn.dataset.status);
+        if(action==='trip-rollover')await rolloverTripToNextWorkingDay(id);
+        if(action==='insert-item')await insertItemAfter(id);
+        if(action==='insert-trip')await insertTripAfter(id);
+        if(action==='dup')await duplicateRow(id);
+        if(action==='del')await deleteRow(id);
+      }catch(err){alert('ทำรายการไม่สำเร็จ: '+err.message);}finally{btn.disabled=false;}
+    });
+    const mobileToolsButton=$('mobileToolsButton');
+    const headerControls=document.querySelector('.controls');
+    Array.from(headerControls.children).forEach(el=>{
+      if((el.tagName==='BUTTON'&&!['addRowBtn','mobileToolsButton'].includes(el.id))||el.id==='weeklyOutboundPlanStatus')el.classList.add('mobile-extra');
+    });
+    mobileToolsButton.onclick=()=>{const expanded=headerControls.classList.toggle('show-mobile-tools');mobileToolsButton.setAttribute('aria-expanded',String(expanded));mobileToolsButton.textContent=expanded?'ย่อเครื่องมือเพิ่มเติม':'เครื่องมือเพิ่มเติม';};
+    new MutationObserver(renderMobileTrips).observe(tbody,{childList:true,subtree:true});
 
     async function duplicateRow(id){
       const row = rowsCache.find(r => r.id === id);
