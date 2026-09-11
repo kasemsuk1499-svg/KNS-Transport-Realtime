@@ -1,16 +1,18 @@
 <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KNS | รวมรีพอท</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#182d44;font:16px system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:24px}header{display:flex;justify-content:space-between;align-items:center;gap:20px}h1{margin:8px 0}h2{font-size:21px}a{color:#245b94}.muted{color:#607287;font-size:14px}.panel{background:white;border:1px solid #dde5ed;border-radius:14px;padding:22px;margin:20px 0}.filters,.grid,.stats{display:flex;gap:16px;flex-wrap:wrap}label{display:flex;flex-direction:column;gap:7px;font-size:14px;flex:1;min-width:150px}input,select,textarea,button{font:inherit;border:1px solid #bccbd8;border-radius:7px;padding:10px;color:inherit}textarea{width:100%;min-height:90px}button{cursor:pointer;background:#184975;color:white;border:0}button:disabled{opacity:.6;cursor:wait}.stats>div{flex:1;min-width:180px;background:#eaf2fa;border-radius:10px;padding:18px}.stats strong{display:block;font-size:32px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:12px;border-bottom:1px solid #e0e7ee;vertical-align:top}th{background:#eaf2fa}td{white-space:pre-wrap;overflow-wrap:anywhere}.scroll{overflow:auto}.error{color:#b42318}.badge{display:inline-block;background:#fff0d6;padding:4px 8px;border-radius:5px}.event{border:1px solid #e0e7ee;border-radius:8px;margin:12px 0;padding:14px}summary{cursor:pointer;font-weight:600}.grid{margin-bottom:16px}[hidden]{display:none!important}@media(max-width:600px){main{padding:12px}.panel{padding:15px}header{align-items:start}h1{font-size:25px}.stats>div{min-width:120px}th,td{padding:8px}}
+.photo-preview,.photo-gallery{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.photo-card{width:140px;display:flex;flex-direction:column;gap:6px;font-size:12px;overflow-wrap:anywhere}.photo-card img,.report-photo{width:140px;height:110px;object-fit:cover;border-radius:7px}.photo-view{padding:0;background:transparent}.photo-card button{padding:6px}#photoDialog{border:0;border-radius:12px;max-width:95vw;max-height:95vh;padding:15px}#photoDialog::backdrop{background:#000b}#photoFull{display:block;max-width:85vw;max-height:75vh;object-fit:contain;margin:12px auto}#photoCaption{overflow-wrap:anywhere}
 </style></head><body><main><header><div><div class="muted">KNS TRANSPORT</div><h1>รวมรีพอท</h1><p class="muted">ประวัติการแก้ไขและสิ่งผิดปกติประจำวัน</p></div><a href="../">← กลับหน้าแผน</a></header>
 <section class="panel"><div class="filters"><label>ช่วงเวลาที่ดู<select id="period"><option value="day">รายวัน</option><option value="month">รายเดือน</option><option value="year">รายปี</option></select></label><label>วันที่ / เดือน / ปี<input id="date" type="date" required></label><label>หน้าแผน<select id="page"><option value="">ทุกหน้า</option><option>STP</option><option>PTR</option><option value="OUT">ส่งออก</option></select></label></div><p id="status" class="muted" role="status">กำลังโหลด…</p><div class="stats"><div>การแก้ไข (ครั้ง)<strong id="editCount">—</strong></div><div>แถวที่ได้รับผล (สะสม)<strong id="rowCount">—</strong></div><div>สิ่งผิดปกติ (รายการ)<strong id="issueCount">—</strong></div></div><p class="muted">นับ 1 ครั้งต่อการบันทึกที่เปลี่ยนข้อมูลจริง การเปลี่ยน Location หลายแถวพร้อมกันนับเป็น 1 ครั้ง • ประวัติเริ่มเก็บหลังติดตั้งรุ่นนี้ • วันที่แก้ไขใช้เวลาไทย ส่วนปัญหาใช้วันที่เกิดเหตุที่ระบุ</p></section>
-<section class="panel"><h2>บันทึกสิ่งผิดปกติ</h2><form id="issueForm"><div class="grid"><label>วันที่เกิดเหตุ<input id="issueDate" type="date" required></label><label>หน้าแผน<select id="issuePage"><option>STP</option><option>PTR</option><option value="OUT">ส่งออก</option></select></label><label>ประเภทปัญหา<select id="issueType"><option>แตก</option><option>ขาด</option><option>ชำรุด</option><option>มาไม่ครบ / ไม่มีมา</option><option>อื่น ๆ</option></select></label></div><div class="grid"><label>สินค้า / แป้ง<input id="product" required maxlength="200" placeholder="ชื่อแป้งหรือสินค้า"></label><label>แบช<input id="batch" required maxlength="120" placeholder="เลขแบช"></label><label>จำนวนถุงที่มีปัญหา<input id="bags" type="number" min="0" step="1" required></label></div><div class="grid"><label>รายละเอียด<textarea id="note" maxlength="3000" placeholder="เช่น แบชนี้มาไม่ครบ 5 ถุง"></textarea></label><label>ผู้บันทึก (ถ้ามี)<input id="author" maxlength="100"></label></div><button id="saveIssue">บันทึกสิ่งผิดปกติ</button><p id="issueStatus" role="status"></p></form></section>
+<section class="panel"><h2>บันทึกสิ่งผิดปกติ</h2><form id="issueForm"><div class="grid"><label>วันที่เกิดเหตุ<input id="issueDate" type="date" required></label><label>หน้าแผน<select id="issuePage"><option>STP</option><option>PTR</option><option value="OUT">ส่งออก</option></select></label><label>ประเภทปัญหา<select id="issueType"><option>แตก</option><option>ขาด</option><option>ชำรุด</option><option>มาไม่ครบ / ไม่มีมา</option><option>อื่น ๆ</option></select></label></div><div class="grid"><label>สินค้า / แป้ง<input id="product" required maxlength="200" placeholder="ชื่อแป้งหรือสินค้า"></label><label>แบช<input id="batch" required maxlength="120" placeholder="เลขแบช"></label><label>จำนวนถุงที่มีปัญหา<input id="bags" type="number" min="0" step="1" required></label></div><div class="grid"><label>รายละเอียด<textarea id="note" maxlength="3000" placeholder="เช่น แบชนี้มาไม่ครบ 5 ถุง"></textarea></label><label>ผู้บันทึก (ถ้ามี)<input id="author" maxlength="100"></label></div><label>แนบรูปภาพ<input id="issuePhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="muted">แนบได้สูงสุด 5 รูป • JPG / PNG / WebP • ไม่เกิน 20 MB ต่อรูป ระบบย่อรูปให้อัตโนมัติ</p><p id="photoStatus" role="status"></p><div id="photoPreview" class="photo-preview"></div><button id="saveIssue">บันทึกสิ่งผิดปกติ</button><p id="issueStatus" role="status"></p></form></section>
 <section class="panel"><h2>สรุปแต่ละวัน</h2><div class="scroll"><table><thead><tr><th>วันที่</th><th>การแก้ไข (ครั้ง)</th><th>สิ่งผิดปกติ (รายการ)</th></tr></thead><tbody id="daily"></tbody></table></div></section>
 <section class="panel"><h2>ประวัติการแก้ไข <span class="muted">กดรายการเพื่อดูค่าเดิม → ค่าใหม่</span></h2><div id="edits"></div></section>
 <section class="panel"><h2>รายการสิ่งผิดปกติ</h2><div class="scroll"><table><thead><tr><th>วันเกิดเหตุ / หน้า</th><th>สินค้า / แบช</th><th>ปัญหา / ถุง</th><th>รายละเอียด</th><th>ผู้บันทึก / เวลาบันทึก</th></tr></thead><tbody id="issues"></tbody></table></div></section>
-</main><script type="module">
+</main><dialog id="photoDialog"><button id="photoClose" type="button">ปิดรูป</button><img id="photoFull" alt=""><p id="photoCaption"></p></dialog><script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import {getDatabase,ref,query,orderByKey,startAt,endAt,onValue,push,set,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import {getDatabase,ref,query,orderByKey,startAt,endAt,onValue,push,set,update,get,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import {firebaseConfig} from './config.js';
 import {thaiDate} from './audit.js';
+import {MAX_PHOTOS,preparePhoto,validPhoto,buildIssueWrite} from './photos.js';
 const db=getDatabase(initializeApp(firebaseConfig));const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const names={tripNo:'คัน / ตู้',productName:'สินค้า',batchNo:'แบช',tankCode:'Tank',bags:'ถุง',kg:'กก.',pallets:'พาเลท',packType:'ประเภทบรรจุ',location:'Location',remark:'หมายเหตุ',tripStatus:'สถานะแผน',bookingNo:'Booking',sourceQty:'จำนวนต้นทาง',inventoryStatus:'สถานะสต็อก',sortOrder:'ลำดับ'};
@@ -27,7 +29,7 @@ function render(){
  const days={};for(const x of e){days[x.day]??={edits:0,issues:0};days[x.day].edits++;}for(const x of i){days[x.day]??={edits:0,issues:0};days[x.day].issues++;}
  $('daily').innerHTML=Object.keys(days).sort().reverse().map(d=>`<tr><td>${esc(d)}</td><td>${days[d].edits}</td><td>${days[d].issues}</td></tr>`).join('')||'<tr><td colspan="3">ไม่มีรายการในช่วงนี้</td></tr>';
  $('edits').innerHTML=e.map(x=>`<details class="event"><summary>${esc(time(x.createdAt))} • ${x.changes.length} แถว • ${esc([...new Set(x.changes.map(c=>pageName(c.page)))].join(', '))}</summary>${x.changes.map(c=>`<p>แผน ${esc(c.planDate)} • ${esc(c.productName||'ไม่ระบุสินค้า')} • แบช ${esc(c.batchNo||'—')} ${c.deleted?'<span class="badge">ลบแถว</span>':''}</p><div class="scroll"><table><thead><tr><th>ช่อง</th><th>ค่าเดิม</th><th>ค่าใหม่</th></tr></thead><tbody>${c.fields.map(f=>`<tr><td>${esc(names[f.field]||f.field)}</td><td>${esc(typeof f.before==='object'&&f.before!==null?JSON.stringify(f.before):f.before??'—')}</td><td>${esc(typeof f.after==='object'&&f.after!==null?JSON.stringify(f.after):f.after??'—')}</td></tr>`).join('')}</tbody></table></div>`).join('')}</details>`).join('')||'<p class="muted">ไม่มีประวัติการแก้ไขในช่วงนี้</p>';
- $('issues').innerHTML=i.map(x=>`<tr><td>${esc(x.day)}<br>${esc(pageName(x.page))}</td><td>${esc(x.productName)}<br>แบช ${esc(x.batchNo)}</td><td>${esc(x.type)}<br>${esc(x.bags)} ถุง</td><td>${esc(x.note)}</td><td>${esc(x.author||'ไม่ระบุ')}<br>${esc(time(x.createdAt))}</td></tr>`).join('')||'<tr><td colspan="5">ไม่มีสิ่งผิดปกติในช่วงนี้</td></tr>';
+ $('issues').innerHTML=i.map(x=>`<tr><td>${esc(x.day)}<br>${esc(pageName(x.page))}</td><td>${esc(x.productName)}<br>แบช ${esc(x.batchNo)}</td><td>${esc(x.type)}<br>${esc(x.bags)} ถุง</td><td>${esc(x.note)}${x.images?.length?`<p><button type="button" data-view-photos="${esc(x.id)}" data-day="${esc(x.day)}">ดูรูปภาพ (${x.images.length})</button><span class="photo-gallery"></span></p>`:''}</td><td>${esc(x.author||'ไม่ระบุ')}<br>${esc(time(x.createdAt))}</td></tr>`).join('')||'<tr><td colspan="5">ไม่มีสิ่งผิดปกติในช่วงนี้</td></tr>';
 }
 function listen(){
  const value=$('date').value,period=$('period').value;
@@ -40,16 +42,60 @@ function listen(){
 }
 $('period').onchange=()=>{const today=thaiDate(),p=$('period').value;$('date').type=p==='year'?'number':p==='month'?'month':'date';$('date').value=p==='year'?today.slice(0,4):p==='month'?today.slice(0,7):today;listen();};
 $('date').onchange=listen;$('page').onchange=render;
+let selectedPhotos=[],preparingPhotos=false;
+function renderPhotoPreview(){
+ $('photoPreview').replaceChildren();
+ for(const photo of selectedPhotos){
+  const card=document.createElement('div');card.className='photo-card';
+  const img=document.createElement('img');img.src=photo.dataUrl;img.alt=photo.name;
+  const caption=document.createElement('span');caption.textContent=photo.name;
+  const remove=document.createElement('button');remove.type='button';remove.textContent='ลบรูป';remove.disabled=$('saveIssue').disabled;
+  remove.onclick=()=>{selectedPhotos=selectedPhotos.filter(x=>x.id!==photo.id);renderPhotoPreview();};
+  card.append(img,caption,remove);$('photoPreview').append(card);
+ }
+}
+$('issuePhotos').onchange=async()=>{
+ if(preparingPhotos||$('saveIssue').disabled)return;
+ const files=Array.from($('issuePhotos').files||[]);$('issuePhotos').value='';
+ if(files.length+selectedPhotos.length>MAX_PHOTOS){$('photoStatus').textContent=`แนบได้สูงสุด ${MAX_PHOTOS} รูปต่อบันทึก`;return;}
+ preparingPhotos=true;$('saveIssue').disabled=true;$('issuePhotos').disabled=true;renderPhotoPreview();$('photoStatus').textContent='กำลังเตรียมรูป…';
+ try{const ready=[];for(const file of files)ready.push(await preparePhoto(file));selectedPhotos.push(...ready);$('photoStatus').textContent=`พร้อมแนบ ${selectedPhotos.length} รูป`;}
+ catch(err){$('photoStatus').textContent=err.message;}
+ finally{preparingPhotos=false;$('saveIssue').disabled=false;$('issuePhotos').disabled=false;renderPhotoPreview();}
+};
+$('issues').addEventListener('click',async event=>{
+ const button=event.target.closest('[data-view-photos]');if(!button||button.disabled)return;
+ const area=button.nextElementSibling;
+ if(area.dataset.loaded){area.hidden=!area.hidden;button.textContent=area.hidden?'ดูรูปภาพ':'ซ่อนรูปภาพ';return;}
+ button.disabled=true;button.textContent='กำลังโหลดรูป…';area.replaceChildren();
+ try{
+  const issue=flatten(issues).find(x=>x.id===button.dataset.viewPhotos&&x.day===button.dataset.day);if(!issue)throw new Error('ไม่พบรายการนี้');
+  const photos=(await get(ref(db,`knsTransport/reportImages/${issue.day}/${issue.id}`))).val()||{};
+  for(const meta of issue.images||[]){
+   const photo=photos[meta.id];if(!validPhoto(photo?.dataUrl))continue;
+   const img=document.createElement('img');img.src=photo.dataUrl;img.alt=meta.name||'รูปสิ่งผิดปกติ';img.loading='lazy';img.className='report-photo';
+   const view=document.createElement('button');view.type='button';view.className='photo-view';view.title='เปิดรูปขนาดใหญ่';
+   view.onclick=()=>{$('photoFull').src=photo.dataUrl;$('photoFull').alt=img.alt;$('photoCaption').textContent=img.alt;$('photoDialog').showModal();};
+   view.append(img);area.append(view);
+  }
+  if(!area.childElementCount)throw new Error('ไม่พบรูปที่เปิดดูได้');
+  area.dataset.loaded='1';area.hidden=false;button.textContent='ซ่อนรูปภาพ';
+ }catch(err){area.textContent='โหลดรูปไม่สำเร็จ: '+err.message;button.textContent='ลองโหลดรูปอีกครั้ง';}
+ finally{button.disabled=false;}
+});
+$('photoClose').onclick=()=>$('photoDialog').close();
+$('photoDialog').addEventListener('close',()=>$('photoFull').removeAttribute('src'));
+
 let pending=null;
 $('issueForm').onsubmit=async event=>{
- event.preventDefault();if($('saveIssue').disabled)return;
+ event.preventDefault();if($('saveIssue').disabled||preparingPhotos)return;
  const product=$('product').value.trim(),batch=$('batch').value.trim();if(!product||!batch){$('issueStatus').textContent='กรุณาระบุสินค้าและแบช';return;}
  const day=$('issueDate').value;const data={day,page:$('issuePage').value,type:$('issueType').value,productName:product,batchNo:batch,bags:Number($('bags').value),note:$('note').value.trim(),author:$('author').value.trim()};
  if(!Number.isSafeInteger(data.bags)||data.bags<0)return;
- const signature=JSON.stringify(data);if(!pending||pending.signature!==signature)pending={signature,target:push(ref(db,`knsTransport/reports/issues/${day}`))};
- $('saveIssue').disabled=true;$('issueStatus').textContent='กำลังบันทึก…';
- try{await set(pending.target,{...data,createdAt:serverTimestamp()});pending=null;$('issueStatus').textContent='บันทึกแล้ว';for(const id of ['product','batch','bags','note'])$(id).value='';$('period').value='day';$('date').type='date';$('date').value=day;$('page').value=data.page;listen();}
+ const photos=selectedPhotos.slice();const signature=JSON.stringify({data,photos:photos.map(x=>x.id)});if(!pending||pending.signature!==signature)pending={signature,target:push(ref(db,`knsTransport/reports/issues/${day}`))};
+ const formControls=Array.from($('issueForm').elements);formControls.forEach(el=>el.disabled=true);renderPhotoPreview();$('issueStatus').textContent='กำลังบันทึก…';
+ try{await update(ref(db),buildIssueWrite(day,pending.target.key,data,photos,serverTimestamp()));pending=null;selectedPhotos=[];renderPhotoPreview();$('photoStatus').textContent='';$('issueStatus').textContent='บันทึกแล้ว';for(const id of ['product','batch','bags','note'])$(id).value='';$('period').value='day';$('date').type='date';$('date').value=day;$('page').value=data.page;listen();}
  catch(err){$('issueStatus').textContent='บันทึกไม่สำเร็จ: '+err.message;}
- finally{$('saveIssue').disabled=false;}
+ finally{formControls.forEach(el=>el.disabled=false);renderPhotoPreview();}
 };listen();
 </script></body></html>

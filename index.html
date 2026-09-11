@@ -1008,13 +1008,14 @@
       button{padding:9px 10px}
     }
   
-    .cell-edit-btn{font-size:10px;padding:3px 7px;margin:3px 0;background:#334155;color:white;border-radius:5px}
-    #cellEditDialog{width:min(520px,90vw);border:0;border-radius:16px;padding:24px}
+    .row-edit-btn{font-size:10px;padding:3px 7px;margin:3px 0;background:#334155;color:white;border-radius:5px}
+    #cellEditDialog{width:min(850px,94vw);max-height:90vh;overflow:auto;border:0;border-radius:16px;padding:24px}
     #cellEditDialog::backdrop{background:#0f172a88}
     #cellEditDialog input,#cellEditDialog textarea,#cellEditDialog select{width:100%;box-sizing:border-box;padding:12px;margin:12px 0;font:inherit}
     #cellEditDialog menu{display:flex;gap:12px;padding:0;justify-content:flex-end}
+    #editControl{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px} #editControl label{display:block;text-align:left;font-weight:600}
     .reports-link{display:inline-block;margin:12px;padding:10px 18px;background:#173e67;color:white;border-radius:8px;text-decoration:none}
-    @media print{.cell-edit-btn,.reports-link{display:none!important}}
+    @media print{.row-edit-btn,.reports-link{display:none!important}}
   </style>
 </head>
 <body>
@@ -2895,82 +2896,93 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let activeEdit = null;
     function lockCells(){
       tbody.querySelectorAll('input[data-field],textarea[data-field],select[data-field]').forEach(el=>{
-        if(el.dataset.locked) return;
-        el.dataset.locked='1';
-        if(el.tagName==='SELECT') el.disabled=true; else el.readOnly=true;
-        const btn=document.createElement('button');
-        btn.type='button'; btn.className='cell-edit-btn'; btn.textContent='แก้ไข';
-        btn.setAttribute('aria-label','แก้ไข '+(fieldLabels[el.dataset.field]||el.dataset.field));
-        btn.onclick=()=>openCellEditor(el);
-        el.after(btn);
+        if(el.tagName==='SELECT')el.disabled=true;else el.readOnly=true;
+      });
+      tbody.querySelectorAll('tr').forEach(tr=>{
+        const id=tr.querySelector('[data-id]')?.dataset.id;
+        const actions=tr.querySelector('.row-actions');
+        if(!id||!actions||actions.querySelector('.row-edit-btn'))return;
+        const btn=document.createElement('button');btn.type='button';btn.className='row-edit-btn';btn.textContent='แก้ไข';
+        btn.onclick=()=>openRowEditor(id);actions.append(btn);
       });
     }
     new MutationObserver(lockCells).observe(tbody,{childList:true,subtree:true});
-    function openCellEditor(el){
-      const row=rowsCache.find(r=>r.id===el.dataset.id);
-      if(!row) return;
-      activeEdit={legacy:legacyMode,id:row.id,field:el.dataset.field,page:currentPage,date:currentDate,original:row[el.dataset.field]??'',display:el.value};
-      $('editHeading').textContent='แก้ไข '+(fieldLabels[activeEdit.field]||activeEdit.field);
+    function openRowEditor(id){
+      const row=rowsCache.find(r=>r.id===id);if(!row)return;
+      const fields=currentPage===OUTBOUND_PAGE
+        ? ['bookingNo','tripNo','location','productName','batchNo','tankCode','sourceQty','bags','packType','kg','inventoryStatus','remark']
+        : ['tripNo','productName','batchNo','tankCode','bags','kg','pallets','packType','remark','location'];
+      activeEdit={legacy:legacyMode,id,page:currentPage,date:currentDate,original:{...row},fields,display:{}};
+      $('editHeading').textContent='แก้ไขข้อมูลทั้งแถว';
       $('editContext').textContent=`${currentPage} • แผน ${currentDate} • ${row.productName||'ยังไม่ระบุสินค้า'} • แบช ${row.batchNo||'—'}`;
-      const control=el.cloneNode(true); control.removeAttribute('data-id'); control.removeAttribute('data-field'); control.id='editValue';control.readOnly=false;control.disabled=false;
-      if(control.type==='number') control.step='any';
-      $('editControl').replaceChildren(control);$('editError').textContent='';
-      $('cellEditDialog').showModal();control.focus();
+      $('editControl').replaceChildren();
+      for(const field of fields){
+        const source=Array.from(tbody.querySelectorAll('[data-field]')).find(el=>el.dataset.id===id&&el.dataset.field===field);
+        const control=source?source.cloneNode(true):document.createElement(['remark','location'].includes(field)?'textarea':'input');
+        if(!source)control.value=field==='location'?formatLocationForEdit(getDisplayLocation(row)):row[field]??'';
+        for(const attr of ['data-id','data-field','data-locked','class','style'])control.removeAttribute(attr);
+        control.id='edit-'+field;control.dataset.editField=field;control.readOnly=false;control.disabled=false;
+        if(['tripNo','bags','kg','pallets','sourceQty'].includes(field)){control.type='number';control.step='any';control.min='0';}
+        activeEdit.display[field]=control.value;
+        const label=document.createElement('label');label.textContent=fieldLabels[field]||field;label.append(control);$('editControl').append(label);
+      }
+      $('editError').textContent='';$('cellEditDialog').showModal();$('editControl').querySelector('input,textarea,select')?.focus();
     }
     $('editCancel').onclick=()=>$('cellEditDialog').close();
     $('cellEditDialog').addEventListener('cancel',e=>{if($('editSave').disabled)e.preventDefault();});
     $('cellEditForm').onsubmit=async e=>{
-      e.preventDefault(); if(!activeEdit||$('editSave').disabled)return;
-      const edit={...activeEdit}; const control=$('editValue');
-      $('editSave').disabled=true;$('editCancel').disabled=true;control.disabled=true;$('editError').textContent='กำลังบันทึก…';
+      e.preventDefault();if(!activeEdit||$('editSave').disabled)return;
+      const edit=activeEdit,controls=Array.from($('editControl').querySelectorAll('[data-edit-field]'));
+      $('editSave').disabled=true;$('editCancel').disabled=true;controls.forEach(c=>c.disabled=true);$('editError').textContent='กำลังบันทึก…';
       try{
-        const base=`${edit.legacy ? "knsTransport" : `knsTransport/pages/${edit.page}`}/plans/${edit.date}/rows`;
+        const base=`${edit.legacy?'knsTransport':`knsTransport/pages/${edit.page}`}/plans/${edit.date}/rows`;
         const current=(await get(ref(db,`${base}/${edit.id}`))).val();
         if(!current)throw new Error('แถวนี้ถูกลบแล้ว กรุณาปิดและเปิดใหม่');
-        if(String(current[edit.field]??'')!==String(edit.original))throw new Error('ข้อมูลช่องนี้เปลี่ยนจากอีกเครื่องแล้ว กรุณายกเลิกและเปิดแก้ไขใหม่');
-        if(control.value===edit.display){$('cellEditDialog').close();return;}
-        let value=control.value;
-        if(['tripNo','bags','kg','pallets','sourceQty','fclCount'].includes(edit.field)){
-          value=value===''?'':Number(value);if(value!==''&&(!Number.isFinite(value)||value<0))throw new Error('กรุณาระบุจำนวนตั้งแต่ 0 ขึ้นไป');
+        if(edit.fields.some(f=>String(current[f]??'')!==String(edit.original[f]??'')))throw new Error('แถวนี้มีข้อมูลเปลี่ยนจากอีกเครื่องแล้ว กรุณายกเลิกและเปิดแก้ไขใหม่');
+        const payload={};
+        for(const control of controls){
+          const field=control.dataset.editField;if(control.value===edit.display[field])continue;
+          let value=control.value;
+          if(['tripNo','bags','kg','pallets','sourceQty'].includes(field)){
+            value=value===''?'':Number(value);if(value!==''&&(!Number.isFinite(value)||value<0))throw new Error('กรุณาระบุจำนวนตั้งแต่ 0 ขึ้นไป');
+          }
+          if(field==='tankCode')value=normalizedTank(value);
+          if(field==='packType')value=normalizePackType(value);
+          if(field==='location')value=String(value).trim();
+          if(String(value)!==String(current[field]??''))payload[field]=value;
         }
-        if(edit.field==='tankCode')value=normalizedTank(value);
-        if(edit.field==='packType')value=normalizePackType(value);
-        if(edit.field==='location')value=String(value).trim();
-        if(String(value)===String(current[edit.field]??'')){$('cellEditDialog').close();return;}
-        const payload={[edit.field]:value,updatedAt:serverTimestamp()};
-        if(edit.field==='bags'||edit.field==='packType'){
-          const kg=kgFromBagsAndPackType(edit.field==='bags'?value:current.bags,edit.field==='packType'?value:current.packType);
-          if(kg!=='')payload.kg=kg;
+        const changed=f=>Object.hasOwn(payload,f);
+        if(!Object.keys(payload).length){$('cellEditDialog').close();return;}
+        let merged={...current,...payload};
+        // Explicitly entered weight wins over automatic calculation.
+        if((changed('bags')||changed('packType'))&&!changed('kg')){
+          const kg=kgFromBagsAndPackType(merged.bags,merged.packType);if(kg!=='')payload.kg=kg;
+        }else if(changed('kg')&&!changed('packType')){const type=calcPackType(merged.bags,merged.kg);if(type)payload.packType=type;}
+        merged={...current,...payload};const patch={};
+        if(changed('productName')&&String(merged.productName).trim()){
+          const name=String(merged.productName).trim();patch[`knsTransport/pages/${edit.page}/productOptions/${encodeProductKey(name)}`]={name,updatedAt:serverTimestamp(),sourceDate:edit.date,page:edit.page};
         }
-        if(edit.field==='kg'){const type=calcPackType(current.bags,value);if(type)payload.packType=type;}
-        const patch={};
-        if(edit.field==='productName'&&String(value).trim()){
-          const name=String(value).trim();
-          patch[`knsTransport/pages/${edit.page}/productOptions/${encodeProductKey(name)}`]={name,updatedAt:serverTimestamp(),sourceDate:edit.date,page:edit.page};
-        }
-        if(edit.field==='location'){
+        const key=makeProductTankKey(merged.productName,merged.tankCode);
+        const rememberLocation=location=>{patch[`knsTransport/pages/${edit.page}/productTankLocations/${key}`]={productName:merged.productName,productKey:normalizedProduct(merged.productName),tankCode:normalizedTank(merged.tankCode),location,updatedAt:serverTimestamp(),page:edit.page,sourceDate:edit.date};};
+        if(changed('location')){
           payload.locationUpdatedAt=serverTimestamp();
-          const key=makeProductTankKey(current.productName,current.tankCode);
           if(key&&edit.page!==OUTBOUND_PAGE){
             const all=(await get(ref(db,base))).val()||{};
-            for(const [id,row] of Object.entries(all))if(makeProductTankKey(row.productName,row.tankCode)===key){
-              patch[`${base}/${id}/location`]=value;patch[`${base}/${id}/locationUpdatedAt`]=serverTimestamp();patch[`${base}/${id}/updatedAt`]=serverTimestamp();
+            for(const [id,row] of Object.entries(all))if(id!==edit.id&&makeProductTankKey(row.productName,row.tankCode)===key){
+              patch[`${base}/${id}/location`]=payload.location;patch[`${base}/${id}/locationUpdatedAt`]=serverTimestamp();patch[`${base}/${id}/updatedAt`]=serverTimestamp();
             }
-            patch[`knsTransport/pages/${edit.page}/productTankLocations/${key}`]={productName:current.productName,productKey:normalizedProduct(current.productName),tankCode:normalizedTank(current.tankCode),location:value,updatedAt:serverTimestamp(),page:edit.page,sourceDate:edit.date};
+            rememberLocation(payload.location);
           }
+        }else if((changed('productName')||changed('tankCode'))&&key&&edit.page!==OUTBOUND_PAGE){
+          const known=(await get(ref(db,`knsTransport/pages/${edit.page}/productTankLocations/${key}`))).val();
+          if(known){payload.location=known.location??'';payload.locationUpdatedAt=serverTimestamp();}
+          else if(merged.location)rememberLocation(merged.location);
         }
-        if(['productName','tankCode'].includes(edit.field)&&edit.page!==OUTBOUND_PAGE){
-          const merged={...current,...payload};const key=makeProductTankKey(merged.productName,merged.tankCode);
-          if(key){const known=(await get(ref(db,`knsTransport/pages/${edit.page}/productTankLocations/${key}`))).val();
-            if(known){payload.location=known.location??'';payload.locationUpdatedAt=serverTimestamp();}
-            else if(merged.location){patch[`knsTransport/pages/${edit.page}/productTankLocations/${key}`]={productName:merged.productName,productKey:normalizedProduct(merged.productName),tankCode:normalizedTank(merged.tankCode),location:merged.location,updatedAt:serverTimestamp(),page:edit.page,sourceDate:edit.date};}
-          }
-        }
-        for(const [key,val] of Object.entries(payload))patch[`${base}/${edit.id}/${key}`]=val;
-        await update(ref(db),patch);
-        $('cellEditDialog').close();
+        payload.updatedAt=serverTimestamp();
+        for(const [field,value] of Object.entries(payload))patch[`${base}/${edit.id}/${field}`]=value;
+        await update(ref(db),patch);$('cellEditDialog').close();
       }catch(err){$('editError').textContent='บันทึกไม่สำเร็จ: '+err.message;}
-      finally{$('editSave').disabled=false;$('editCancel').disabled=false;control.disabled=false;}
+      finally{$('editSave').disabled=false;$('editCancel').disabled=false;controls.forEach(c=>c.disabled=false);}
     };
     async function duplicateRow(id){
       const row = rowsCache.find(r => r.id === id);
