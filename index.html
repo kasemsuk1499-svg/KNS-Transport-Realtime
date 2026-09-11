@@ -1007,9 +1007,19 @@
       .hint{font-size:12px}
       button{padding:9px 10px}
     }
+  
+    .cell-edit-btn{font-size:10px;padding:3px 7px;margin:3px 0;background:#334155;color:white;border-radius:5px}
+    #cellEditDialog{width:min(520px,90vw);border:0;border-radius:16px;padding:24px}
+    #cellEditDialog::backdrop{background:#0f172a88}
+    #cellEditDialog input,#cellEditDialog textarea,#cellEditDialog select{width:100%;box-sizing:border-box;padding:12px;margin:12px 0;font:inherit}
+    #cellEditDialog menu{display:flex;gap:12px;padding:0;justify-content:flex-end}
+    .reports-link{display:inline-block;margin:12px;padding:10px 18px;background:#173e67;color:white;border-radius:8px;text-decoration:none}
+    @media print{.cell-edit-btn,.reports-link{display:none!important}}
   </style>
 </head>
 <body>
+  <a class="reports-link" href="./reports/">📋 รวมรีพอท / บันทึกสิ่งผิดปกติ</a>
+  <dialog id="cellEditDialog"><form id="cellEditForm"><h2 id="editHeading">แก้ไขข้อมูล</h2><p id="editContext"></p><div id="editControl"></div><p id="editError" role="alert" style="color:#b91c1c"></p><menu><button type="button" id="editCancel">ยกเลิก</button><button type="submit" id="editSave">บันทึก</button></menu></form></dialog>
   <header>
     <div class="topbar">
       <h1>แผนการขนย้ายสินค้าไปคลังสินค้าด้านนอก (KNS)</h1>
@@ -1192,7 +1202,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getDatabase, ref, onValue, push, set, update, remove, serverTimestamp,
+      getDatabase, ref, onValue, push, set, update as rawUpdate, remove as rawRemove, serverTimestamp,
       onDisconnect, get
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
@@ -1208,6 +1218,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    import { createAudit } from './reports/audit.js';
+    const { update, remove } = createAudit(db, {ref,get,push,update:rawUpdate,remove:rawRemove,serverTimestamp});
+
 
     const $ = (id) => document.getElementById(id);
     const dateInput = $("dateInput");
@@ -1247,6 +1260,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let productOptionsUnsubscribe = null;
     let todoUnsubscribe = null;
     let rowsCache = [];
+    let legacyMode = false;
     let tankLocationCache = {};
     let productOptionsCache = {};
     let saveTimers = new Map();
@@ -1603,11 +1617,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function rowRef(id){
-      return ref(db, `${pageRoot()}/plans/${currentDate}/rows/${id}`);
+      return ref(db, `${legacyMode ? "knsTransport" : pageRoot()}/plans/${currentDate}/rows/${id}`);
     }
 
     function rowsRootRef(date=currentDate){
-      return ref(db, `${pageRoot()}/plans/${date}/rows`);
+      return ref(db, `${legacyMode ? "knsTransport" : pageRoot()}/plans/${date}/rows`);
     }
 
     function encodeTankKey(tankCode){
@@ -2114,6 +2128,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function listenDate(date){
       currentDate = date;
+      legacyMode = false;
       applyPageUI();
       listenTodos();
       listenEmptyLocations(date);
@@ -2135,12 +2150,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       unsubscribe = onValue(dateRef(date), (snap) => {
         const raw = snap.val() || {};
+        legacyMode = false;
         rowsCache = sortRows(raw);
 
         // เพื่อไม่ให้ข้อมูลเดิมหาย: ถ้าเปิด STP แล้ว path ใหม่ยังว่าง ให้แสดงข้อมูลเดิมจาก knsTransport/plans/... เป็น fallback
         if(!rowsCache.length && currentPage === "STP"){
           onValue(legacyDateRef(date), (legacySnap) => {
             const legacyRaw = legacySnap.val() || {};
+            legacyMode = Object.keys(legacyRaw).length > 0;
             rowsCache = sortRows(legacyRaw);
             queueLocationSync();
             renderRows();
@@ -2873,104 +2890,88 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }, { sortOrder: nextDefaultSortOrder() });
     }
 
-    function markUnsaved(el){
-      el.classList.add("dirty");
-      el.classList.remove("saved-flash");
-      el.dataset.pendingValue = el.value;
-      el.title = "ยังไม่บันทึก: กด Enter / Tab / คลิกออกจากช่อง เพื่อบันทึก";
+
+    const fieldLabels = {tripNo:'คัน / ตู้',productName:'สินค้า / แป้ง',batchNo:'แบช',tankCode:'Tank',bags:'จำนวนถุง',kg:'น้ำหนัก (กก.)',pallets:'พาเลท',packType:'ประเภทบรรจุ',remark:'หมายเหตุ',location:'Location',bookingNo:'Booking',sourceQty:'จำนวนต้นทาง',inventoryStatus:'สถานะสต็อก'};
+    let activeEdit = null;
+    function lockCells(){
+      tbody.querySelectorAll('input[data-field],textarea[data-field],select[data-field]').forEach(el=>{
+        if(el.dataset.locked) return;
+        el.dataset.locked='1';
+        if(el.tagName==='SELECT') el.disabled=true; else el.readOnly=true;
+        const btn=document.createElement('button');
+        btn.type='button'; btn.className='cell-edit-btn'; btn.textContent='แก้ไข';
+        btn.setAttribute('aria-label','แก้ไข '+(fieldLabels[el.dataset.field]||el.dataset.field));
+        btn.onclick=()=>openCellEditor(el);
+        el.after(btn);
+      });
     }
-
-    function discardUnsaved(el){
-      el.classList.remove("dirty", "saving");
-      delete el.dataset.pendingValue;
-      renderRows();
+    new MutationObserver(lockCells).observe(tbody,{childList:true,subtree:true});
+    function openCellEditor(el){
+      const row=rowsCache.find(r=>r.id===el.dataset.id);
+      if(!row) return;
+      activeEdit={legacy:legacyMode,id:row.id,field:el.dataset.field,page:currentPage,date:currentDate,original:row[el.dataset.field]??'',display:el.value};
+      $('editHeading').textContent='แก้ไข '+(fieldLabels[activeEdit.field]||activeEdit.field);
+      $('editContext').textContent=`${currentPage} • แผน ${currentDate} • ${row.productName||'ยังไม่ระบุสินค้า'} • แบช ${row.batchNo||'—'}`;
+      const control=el.cloneNode(true); control.removeAttribute('data-id'); control.removeAttribute('data-field'); control.id='editValue';control.readOnly=false;control.disabled=false;
+      if(control.type==='number') control.step='any';
+      $('editControl').replaceChildren(control);$('editError').textContent='';
+      $('cellEditDialog').showModal();control.focus();
     }
-
-    async function commitSave(el, keepFocus=false){
-      const id = el.dataset.id;
-      const field = el.dataset.field;
-      if(!id || !field || el.dataset.saving === "1") return;
-
-      const key = `${id}:${field}`;
-      clearTimeout(saveTimers.get(key));
-
-      const rawValue = el.value;
-      el.dataset.saving = "1";
-      el.classList.remove("dirty");
-      el.classList.add("saving");
-      el.title = "กำลังบันทึก...";
-
+    $('editCancel').onclick=()=>$('cellEditDialog').close();
+    $('cellEditDialog').addEventListener('cancel',e=>{if($('editSave').disabled)e.preventDefault();});
+    $('cellEditForm').onsubmit=async e=>{
+      e.preventDefault(); if(!activeEdit||$('editSave').disabled)return;
+      const edit={...activeEdit}; const control=$('editValue');
+      $('editSave').disabled=true;$('editCancel').disabled=true;control.disabled=true;$('editError').textContent='กำลังบันทึก…';
       try{
-        let value = rawValue;
-        if(["tripNo","bags","kg","pallets","sourceQty","fclCount"].includes(field)){
-          value = value === "" ? "" : Number(value);
+        const base=`${edit.legacy ? "knsTransport" : `knsTransport/pages/${edit.page}`}/plans/${edit.date}/rows`;
+        const current=(await get(ref(db,`${base}/${edit.id}`))).val();
+        if(!current)throw new Error('แถวนี้ถูกลบแล้ว กรุณาปิดและเปิดใหม่');
+        if(String(current[edit.field]??'')!==String(edit.original))throw new Error('ข้อมูลช่องนี้เปลี่ยนจากอีกเครื่องแล้ว กรุณายกเลิกและเปิดแก้ไขใหม่');
+        if(control.value===edit.display){$('cellEditDialog').close();return;}
+        let value=control.value;
+        if(['tripNo','bags','kg','pallets','sourceQty','fclCount'].includes(edit.field)){
+          value=value===''?'':Number(value);if(value!==''&&(!Number.isFinite(value)||value<0))throw new Error('กรุณาระบุจำนวนตั้งแต่ 0 ขึ้นไป');
         }
-        if(field === "packType"){
-          value = normalizePackType(value);
+        if(edit.field==='tankCode')value=normalizedTank(value);
+        if(edit.field==='packType')value=normalizePackType(value);
+        if(edit.field==='location')value=String(value).trim();
+        if(String(value)===String(current[edit.field]??'')){$('cellEditDialog').close();return;}
+        const payload={[edit.field]:value,updatedAt:serverTimestamp()};
+        if(edit.field==='bags'||edit.field==='packType'){
+          const kg=kgFromBagsAndPackType(edit.field==='bags'?value:current.bags,edit.field==='packType'?value:current.packType);
+          if(kg!=='')payload.kg=kg;
         }
-        if(field === "location"){
-          // ไม่บังคับตรวจว่าโลมีในระบบ เพื่อให้พิมพ์หมายเหตุเองได้อิสระ
-          await saveLocationForTank(id, value);
-        }else{
-          const currentRow = rowsCache.find(r => r.id === id) || {};
-          const saveValue = field === "tankCode" ? normalizedTank(value) : value;
-          const payload = {
-            [field]: saveValue,
-            updatedAt: serverTimestamp()
-          };
-
-          if(field === "bags"){
-            const type = normalizePackType(currentRow.packType);
-            const autoKg = kgFromBagsAndPackType(saveValue, type);
-            if(autoKg !== "") payload.kg = autoKg;
-          }
-
-          if(field === "kg"){
-            const type = calcPackType(currentRow.bags, saveValue);
-            if(type) payload.packType = type;
-          }
-
-          if(field === "packType"){
-            const autoKg = kgFromBagsAndPackType(currentRow.bags, saveValue);
-            if(autoKg !== "") payload.kg = autoKg;
-          }
-
-          await update(rowRef(id), payload);
-          if(field === "tankCode"){
-            await applyLocationAfterProductOrTankChange(id, currentRow.productName, saveValue);
-          }
-          if(field === "productName"){
-            await saveProductOption(saveValue);
-            await applyLocationAfterProductOrTankChange(id, saveValue, currentRow.tankCode);
+        if(edit.field==='kg'){const type=calcPackType(current.bags,value);if(type)payload.packType=type;}
+        const patch={};
+        if(edit.field==='productName'&&String(value).trim()){
+          const name=String(value).trim();
+          patch[`knsTransport/pages/${edit.page}/productOptions/${encodeProductKey(name)}`]={name,updatedAt:serverTimestamp(),sourceDate:edit.date,page:edit.page};
+        }
+        if(edit.field==='location'){
+          payload.locationUpdatedAt=serverTimestamp();
+          const key=makeProductTankKey(current.productName,current.tankCode);
+          if(key&&edit.page!==OUTBOUND_PAGE){
+            const all=(await get(ref(db,base))).val()||{};
+            for(const [id,row] of Object.entries(all))if(makeProductTankKey(row.productName,row.tankCode)===key){
+              patch[`${base}/${id}/location`]=value;patch[`${base}/${id}/locationUpdatedAt`]=serverTimestamp();patch[`${base}/${id}/updatedAt`]=serverTimestamp();
+            }
+            patch[`knsTransport/pages/${edit.page}/productTankLocations/${key}`]={productName:current.productName,productKey:normalizedProduct(current.productName),tankCode:normalizedTank(current.tankCode),location:value,updatedAt:serverTimestamp(),page:edit.page,sourceDate:edit.date};
           }
         }
-        el.classList.remove("saving");
-        el.classList.add("saved-flash");
-        el.title = "บันทึกแล้ว / ซิงก์เรียลไทม์แล้ว";
-        delete el.dataset.pendingValue;
-        renderTotals();
-
-        // ถ้าบันทึกด้วย Enter ให้ render ใหม่เพื่อจัดกลุ่ม/รวม Location ทันที
-        // ถ้าบันทึกด้วย blur ปล่อยให้ onValue จาก Firebase render ตามข้อมูลจริง
-        if(keepFocus){
-          renderRows();
-          const next = tbody.querySelector(`[data-id="${CSS.escape(id)}"][data-field="${CSS.escape(field)}"]`);
-          if(next){
-            next.focus();
-            if(typeof next.select === "function") next.select();
+        if(['productName','tankCode'].includes(edit.field)&&edit.page!==OUTBOUND_PAGE){
+          const merged={...current,...payload};const key=makeProductTankKey(merged.productName,merged.tankCode);
+          if(key){const known=(await get(ref(db,`knsTransport/pages/${edit.page}/productTankLocations/${key}`))).val();
+            if(known){payload.location=known.location??'';payload.locationUpdatedAt=serverTimestamp();}
+            else if(merged.location){patch[`knsTransport/pages/${edit.page}/productTankLocations/${key}`]={productName:merged.productName,productKey:normalizedProduct(merged.productName),tankCode:normalizedTank(merged.tankCode),location:merged.location,updatedAt:serverTimestamp(),page:edit.page,sourceDate:edit.date};}
           }
         }
-      }catch(err){
-        console.error(err);
-        el.classList.remove("saving");
-        el.classList.add("dirty");
-        el.title = "บันทึกไม่สำเร็จ: กด Enter อีกครั้ง";
-        alert("บันทึกไม่สำเร็จ กรุณาลองกด Enter อีกครั้ง");
-      }finally{
-        delete el.dataset.saving;
-      }
-    }
-
+        for(const [key,val] of Object.entries(payload))patch[`${base}/${edit.id}/${key}`]=val;
+        await update(ref(db),patch);
+        $('cellEditDialog').close();
+      }catch(err){$('editError').textContent='บันทึกไม่สำเร็จ: '+err.message;}
+      finally{$('editSave').disabled=false;$('editCancel').disabled=false;control.disabled=false;}
+    };
     async function duplicateRow(id){
       const row = rowsCache.find(r => r.id === id);
       if(!row) return;
@@ -6422,43 +6423,6 @@ ${err?.message || err}
         await addRow({ ...data, dateText: formatDateThaiLike(currentDate) });
       }
     }
-
-    tbody.addEventListener("input", (e) => {
-      const el = e.target.closest("input, textarea, select");
-      if(el?.dataset?.id) markUnsaved(el);
-    });
-
-    tbody.addEventListener("change", (e) => {
-      const el = e.target.closest("select");
-      if(el?.dataset?.id){
-        markUnsaved(el);
-        commitSave(el, false);
-      }
-    });
-
-    tbody.addEventListener("keydown", (e) => {
-      const el = e.target.closest("input, textarea, select");
-      if(!el?.dataset?.id || e.isComposing) return;
-      if(e.key === "Enter"){
-        // ช่อง Remark เป็น textarea: กด Enter = บันทึก, กด Shift+Enter = ขึ้นบรรทัดใหม่
-        if(el.tagName === "TEXTAREA" && e.shiftKey) return;
-        e.preventDefault();
-        commitSave(el, true);
-      }
-      if(e.key === "Escape" && el.classList.contains("dirty")){
-        e.preventDefault();
-        discardUnsaved(el);
-      }
-    });
-
-    tbody.addEventListener("focusout", (e) => {
-      const el = e.target.closest("input, textarea, select");
-      if(!el?.dataset?.id || !el.classList.contains("dirty")) return;
-      // Tab หรือคลิกออกจากช่อง = ถือว่าพิมพ์เสร็จแล้ว ให้บันทึกและซิงก์
-      setTimeout(() => {
-        if(el.classList.contains("dirty")) commitSave(el, false);
-      }, 120);
-    });
 
     tbody.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
