@@ -52,7 +52,7 @@ export function collectTrips(sourceByPage){
 export function mergeWithSaved(fresh, savedTrips){
   const old = Array.isArray(savedTrips)?savedTrips:Object.values(savedTrips||{});
   const oldByKey=new Map(old.filter(Boolean).map(t=>[t.key,t]));
-  return fresh.map(trip=>{
+  const refreshed=fresh.map(trip=>{
     const prev=oldByKey.get(trip.key);
     if(!prev)return trip;
     // Previously reviewed fields belong to the report. Refresh quantities from current plan.
@@ -65,6 +65,10 @@ export function mergeWithSaved(fresh, savedTrips){
       resolution:str(prev.resolution)
     };
   });
+  // A plan row can be deleted after closeout. Do not silently discard its saved
+  // historical result or feedback when the report is reopened.
+  const visible=new Set(refreshed.map(t=>t.key));
+  return [...refreshed,...old.filter(t=>!visible.has(t.key)).map(t=>({...t,archived:true}))];
 }
 export function countTrips(trips){
   const data={total:0,ok:0,mismatch:0,rollover:0,pending:0,small:0,large:0,bags:0,kg:0,byPage:{}};
