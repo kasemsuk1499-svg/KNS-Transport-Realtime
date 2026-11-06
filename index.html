@@ -2367,7 +2367,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function normalizedTripNo(row){
-      return String(row?.tripNo ?? '').trim();
+      // Outbound exports can store a container round in exportRound before tripNo is set.
+      return String(row?.tripNo || (currentPage===OUTBOUND_PAGE ? row?.exportRound : '') || '').trim();
     }
 
     function rowsInSameTripById(id){
