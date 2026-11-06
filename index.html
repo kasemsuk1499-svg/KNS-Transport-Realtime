@@ -1067,7 +1067,7 @@
 </style>
 </head>
 <body>
-  <a class="reports-link" href="./reports/">📋 รวมรีพอท / บันทึกสิ่งผิดปกติ</a><a class="reports-link" href="./reports/closeout.html">🚛 สรุปจบงาน / รีพอร์ตรายสัปดาห์</a>
+  <a class="reports-link" href="./reports/">📋 รวมรีพอท / บันทึกสิ่งผิดปกติ</a><a id="closeoutLink" class="reports-link" href="./reports/closeout.html">🚛 สรุปจบงาน / รีพอร์ตรายสัปดาห์</a>
   <dialog id="tripMetaDialog"><form id="tripMetaForm">
     <h2>🚚 บริษัทขนส่ง / ปัญหาแบชประจำคัน</h2>
     <p id="tripMetaContext" class="hint"></p>
@@ -2189,6 +2189,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function listenDate(date){
       currentDate = date;
+      const closeoutLink=$('closeoutLink');
+      if(closeoutLink) closeoutLink.href='./reports/closeout.html?day='+encodeURIComponent(date);
       legacyMode = false;
       applyPageUI();
       listenTodos();
@@ -3159,7 +3161,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const status=rows.find(r=>TRIP_STATUS[r.tripStatus])?.tripStatus;
         const booking=currentPage===OUTBOUND_PAGE?`<div class="mobile-trip-sub">Booking ${escapeHtml(first.bookingNo||'—')}</div>`:'';
         const facts=(label,value,full=false)=>`<div${full?' class="mobile-full"':''}><dt>${label}</dt><dd>${escapeHtml(value??'—')}</dd></div>`;
-        return `<details class="mobile-trip" data-trip-key="${escapeAttr(key)}" ${expandedTrips.has(key)?'open':''}><summary><div><strong class="mobile-trip-title">${escapeHtml(title)}</strong>${booking}<div class="mobile-trip-sub">${rows.length} รายการ • ${fmt(bags)} ถุง • ${fmt(kg,2)} กก.</div><div class="mobile-trip-sub">${escapeHtml(status?TRIP_STATUS[status].short:'ยังไม่เลือกสถานะ')}</div></div></summary><div class="mobile-trip-body">
+        return `<details class="mobile-trip" data-trip-key="${escapeAttr(key)}" ${expandedTrips.has(key)?'open':''}><summary><div><strong class="mobile-trip-title">${escapeHtml(title)}</strong>${booking}<div class="mobile-trip-sub">${rows.length} รายการ • ${fmt(bags)} ถุง • ${fmt(kg,2)} กก.</div><div class="mobile-trip-sub">${escapeHtml(status?TRIP_STATUS[status].short:'ยังไม่เลือกสถานะ')}</div>${tripMetaChip(first)}</div></summary><div class="mobile-trip-body">
           <div class="mobile-trip-actions"><button type="button" class="good" data-mobile-action="trip-status" data-status="ok" data-row-id="${escapeAttr(first.id)}">ตรงแผน</button><button type="button" class="secondary" data-mobile-action="trip-status" data-status="mismatch" data-row-id="${escapeAttr(first.id)}">ไม่ตรงแผน</button><button type="button" data-mobile-action="trip-details" data-row-id="${escapeAttr(first.id)}">🚚 บริษัท / ปัญหาแบช</button></div>
           ${rows.map((row,index)=>`<article class="mobile-item"><h3>${index+1}. ${escapeHtml(row.productName||'ยังไม่ระบุสินค้า')}</h3><dl class="mobile-facts">
             ${facts('แบช',row.batchNo||'—')}${facts('Tank',row.tankCode||'—')}${facts('จำนวนถุง',fmt(num(row.bags)))}${facts('น้ำหนัก (กก.)',fmt(num(row.kg),2))}${facts('ประเภทบรรจุ',row.packType||'—')}
