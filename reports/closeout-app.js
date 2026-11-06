@@ -74,14 +74,19 @@ async function loadDay(restore=true){
     const [source,snap]=await Promise.all([getPlans(day),get(closeoutRef(day))]);
     daySaved=snap.val()||null;
     const fresh=collectTrips(source);
-    dayTrips=restore?mergeWithSaved(fresh,daySaved?.trips):fresh;
+    // Once closed, the saved report is authoritative. Do not silently merge
+    // later plan edits into a completed day's historical snapshot.
+    const savedTrips=daySaved?.trips;
+    dayTrips=restore && savedTrips
+      ? (Array.isArray(savedTrips)?savedTrips:Object.values(savedTrips)).filter(Boolean).map(t=>({...t}))
+      : fresh;
     dayLoaded=day;
     $('dailyNote').value=restore?(daySaved?.note||''):'';
     renderDay();
     const stats=countTrips(dayTrips);
     const warning=stats.pending?' • ยังไม่ระบุสถานะ '+stats.pending+' คัน':'';
     statusMessage('dailyStatus','วันที่ '+day+' • '+stats.total+' คัน/ตู้ • ไม่ตรงแผน '+stats.mismatch+' คัน'+warning+
-      (daySaved&&restore?' • โหลดรีพอร์ตที่เคยบันทึกแล้ว':' • ยังไม่ดึงค่าที่บันทึกไว้มาแก้ไข'),false,true);
+      (daySaved&&restore?' • กำลังดูฉบับที่เคยบันทึก (กดดึงแผนล่าสุดหากต้องการแทนที่)':' • กำลังดูข้อมูลจากแผน'),false,true);
   }catch(error){statusMessage('dailyStatus','โหลดข้อมูลไม่สำเร็จ: '+error.message,true);}
   finally{dailyBusy=false;$('loadDay').disabled=false;$('resetToPlan').disabled=false;}
 }
