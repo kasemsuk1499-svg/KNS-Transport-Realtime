@@ -178,6 +178,7 @@ async function loadWeek(){
 }
 function renderWeek(range){
   renderMetrics('weekStats',weekData.totals);
+  $('weekTrips').innerHTML=weekData.trips.map(t=>'<tr><td>'+esc(t.day)+'</td><td>'+esc(prettyPage(t.page))+' / '+esc(t.tripNo)+'</td><td>'+esc(t.transportCompany||'—')+'</td><td>'+esc(STATUS_LABELS[t.status]||STATUS_LABELS.pending)+'</td><td>'+esc(BATCH_LABELS[t.batchIssue]||BATCH_LABELS.none)+'</td><td>'+esc(t.batchIssueNote||'')+'</td><td>'+esc(t.feedback||'')+'</td><td>'+esc(t.resolution||'')+'</td></tr>').join('')||'<tr><td colspan="8" class="empty">ไม่มีคันในรายงานรายวันที่บันทึกไว้</td></tr>';
   $('weekDays').innerHTML=weekData.days.map(t=>'<tr>'+
     '<td>'+esc(t.day)+'</td><td>'+ (t.saved?'<span class="pill">บันทึกแล้ว (v'+number(t.revision)+')</span>':'<span style="color:#b54732">ยังไม่มีรีพอร์ต</span>')+'</td>'+
     '<td>'+(t.saved?number(t.total):'—')+'</td><td>'+(t.saved?number(t.ok):'—')+'</td>'+
@@ -186,7 +187,7 @@ function renderWeek(range){
     '<td>'+esc(t.note||'')+'</td></tr>').join('');
 }
 $('loadWeek').onclick=loadWeek;
-$('weekDay').onchange=()=>{weekData=null;weekSaved=null;weekStart='';renderMetrics('weekStats',null);$('weekDays').innerHTML='<tr><td colspan="9" class="empty">กดรวบรวมรีพอร์ตสัปดาห์</td></tr>';statusMessage('weekStatus','กดรวบรวมรีพอร์ตสำหรับสัปดาห์ใหม่');};
+$('weekDay').onchange=()=>{weekData=null;weekSaved=null;weekStart='';renderMetrics('weekStats',null);$('weekDays').innerHTML='<tr><td colspan="9" class="empty">กดรวบรวมรีพอร์ตสัปดาห์</td></tr>';$('weekTrips').innerHTML='<tr><td colspan="8">กรุณาเลือกรายงานสัปดาห์</td></tr>';statusMessage('weekStatus','กดรวบรวมรีพอร์ตสำหรับสัปดาห์ใหม่');};
 $('saveWeek').onclick=async()=>{
   if(weeklyBusy||!weekData||weekStart!==weekRange($('weekDay').value).start)return statusMessage('weekStatus','กรุณารวบรวมรีพอร์ตรายสัปดาห์ก่อน',true);
   if(!weekData.savedDays)return statusMessage('weekStatus','ยังไม่มีรีพอร์ตรายวันให้บันทึกรายสัปดาห์',true);
