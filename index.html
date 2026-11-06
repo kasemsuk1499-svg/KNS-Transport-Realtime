@@ -1053,10 +1053,31 @@
     }
     @media print{#mobileTrips,.mobile-tools-toggle{display:none!important}}
 
+
+.trip-meta-chip{display:block;margin:4px 0;padding:5px 8px;border:1px solid #b6d6ea;background:#e9f5ff;border-radius:8px;font-size:11px;line-height:1.5}
+.trip-meta-btn{background:#1d638a;color:white;font-size:12px}
+#tripMetaDialog{border:0;border-radius:16px;padding:22px;width:min(520px,95vw);max-height:90vh;overflow:auto}
+#tripMetaDialog::backdrop{background:#132b4380}
+#tripMetaForm{display:grid;gap:12px}#tripMetaForm label{display:grid;gap:5px;font-weight:700;font-size:13px}
+#tripMetaForm input,#tripMetaForm select,#tripMetaForm textarea{width:100%;box-sizing:border-box}
+#tripMetaForm textarea{min-height:85px}
+.trip-meta-actions{display:flex;gap:10px;justify-content:end}
+#tripMetaError{color:#b91c1c;margin:0}
+@media print{.trip-meta-btn,#tripMetaDialog{display:none!important}}
 </style>
 </head>
 <body>
-  <a class="reports-link" href="./reports/">📋 รวมรีพอท / บันทึกสิ่งผิดปกติ</a>
+  <a class="reports-link" href="./reports/">📋 รวมรีพอท / บันทึกสิ่งผิดปกติ</a><a class="reports-link" href="./reports/closeout.html">🚛 สรุปจบงาน / รีพอร์ตรายสัปดาห์</a>
+  <dialog id="tripMetaDialog"><form id="tripMetaForm">
+    <h2>🚚 บริษัทขนส่ง / ปัญหาแบชประจำคัน</h2>
+    <p id="tripMetaContext" class="hint"></p>
+    <label>ชื่อบริษัทขนส่ง<input id="tripMetaCompany" maxlength="150" placeholder="กรอกชื่อบริษัทขนส่ง"></label>
+    <label>ปัญหาแบช<select id="tripMetaBatchIssue"><option value="none">ไม่มี</option><option value="small">แบชเล็ก</option><option value="large">แบชใหญ่</option><option value="both">ทั้งแบชเล็กและแบชใหญ่</option></select></label>
+    <label>รายละเอียดปัญหา<textarea id="tripMetaBatchNote" maxlength="2000" placeholder="เลขแบช สาเหตุ หรือจำนวนที่ผิดปกติ"></textarea></label>
+    <p class="hint">บันทึกให้ทุกแถวของคันรถเดียวกันเพื่อใช้ทำรีพอร์ตจบวัน</p>
+    <p id="tripMetaError" role="alert"></p>
+    <div class="trip-meta-actions"><button type="button" class="light" id="tripMetaCancel">ยกเลิก</button><button type="submit" class="good" id="tripMetaSave">บันทึกข้อมูลคัน</button></div>
+  </form></dialog>
   <dialog id="cellEditDialog"><form id="cellEditForm"><h2 id="editHeading">แก้ไขข้อมูล</h2><p id="editContext"></p><div id="editControl"></div><p id="editError" role="alert" style="color:#b91c1c"></p><menu><button type="button" id="editCancel">ยกเลิก</button><button type="submit" id="editSave">บันทึก</button></menu></form></dialog>
   <header>
     <div class="topbar">
@@ -2372,12 +2393,57 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return status ? `<span class="trip-status-chip">สถานะ: ${escapeHtml(TRIP_STATUS[status].short)}</span>` : '';
     }
 
+
+    function tripMetaChip(row){
+      const same=rowsInSameTripById(row.id);
+      const company=String((same.find(r=>r.transportCompany)||{}).transportCompany||'').trim();
+      const detail=same.find(r=>r.batchIssue&&r.batchIssue!=='none')||same.find(r=>r.batchIssueNote)||{};
+      const labels={small:'แบชเล็ก',large:'แบชใหญ่',both:'แบชเล็ก+ใหญ่'};
+      const label=labels[detail.batchIssue]||'';
+      const note=String(detail.batchIssueNote||'').trim();
+      if(!company&&!label&&!note)return '';
+      return '<span class="trip-meta-chip">'+(company?'🚚 '+escapeHtml(company):'ไม่ได้ระบุบริษัท')+(label?' • ⚠️ '+label:'')+(note?' • '+escapeHtml(note):'')+'</span>';
+    }
+    let activeTripMetaId=null;
+    function openTripMeta(id){
+      if(hasPendingEdit()){alert('กรุณาบันทึก Location ก่อน');return;}
+      const same=rowsInSameTripById(id);if(!same.length)return;
+      const row=same[0];
+      const company=same.find(r=>r.transportCompany)||row;
+      const batch=same.find(r=>r.batchIssue&&r.batchIssue!=='none')||row;
+      const note=same.find(r=>r.batchIssueNote)||row;
+      activeTripMetaId=id;
+      $('tripMetaContext').textContent=(currentPage===OUTBOUND_PAGE?'ตู้ ':'คัน ')+(row.tripNo||row.exportRound||'—')+' • '+currentPage+' • '+currentDate+' • '+same.length+' แถวสินค้า';
+      $('tripMetaCompany').value=company.transportCompany||'';
+      $('tripMetaBatchIssue').value=['none','small','large','both'].includes(batch.batchIssue)?batch.batchIssue:'none';
+      $('tripMetaBatchNote').value=note.batchIssueNote||'';
+      $('tripMetaError').textContent='';
+      $('tripMetaDialog').showModal();
+    }
+    $('tripMetaCancel').onclick=()=>$('tripMetaDialog').close();
+    $('tripMetaDialog').addEventListener('close',()=>{activeTripMetaId=null;});
+    $('tripMetaForm').addEventListener('submit',async event=>{
+      event.preventDefault();
+      const same=rowsInSameTripById(activeTripMetaId);if(!same.length)return;
+      const values={transportCompany:$('tripMetaCompany').value.trim(),batchIssue:$('tripMetaBatchIssue').value,batchIssueNote:$('tripMetaBatchNote').value.trim()};
+      const changes={};
+      for(const row of same){
+        for(const [key,value] of Object.entries(values))changes[row.id+'/'+key]=value;
+        changes[row.id+'/updatedAt']=serverTimestamp();
+      }
+      $('tripMetaSave').disabled=true;$('tripMetaError').textContent='';
+      try{await update(rowsRootRef(),changes);$('tripMetaDialog').close();}
+      catch(error){$('tripMetaError').textContent='บันทึกไม่สำเร็จ: '+error.message;}
+      finally{$('tripMetaSave').disabled=false;}
+    });
     function tripStatusButtons(row, isGroupStart){
       if(!isGroupStart) return '';
       const status = tripStatusForRow(row);
       const activeText = status ? `ตอนนี้: ${TRIP_STATUS[status].short}` : 'ยังไม่เลือกสถานะคันนี้';
       return `<div class="trip-status-actions" title="${escapeAttr(activeText)}">
         ${tripStatusChip(row)}
+        ${tripMetaChip(row)}
+        <button type="button" class="trip-meta-btn" data-action="trip-details" data-id="${escapeAttr(row.id)}">🚚 บริษัท / ปัญหาแบช</button>
         <button type="button" class="status-ok-btn" data-action="trip-status" data-status="ok" data-id="${escapeAttr(row.id)}">ตรงแผน</button>
         <button type="button" class="status-mismatch-btn" data-action="trip-status" data-status="mismatch" data-id="${escapeAttr(row.id)}">ไม่ตรงแผน</button>
         <button type="button" class="status-rollover-btn" data-action="trip-rollover" data-id="${escapeAttr(row.id)}">เลื่อนไปพรุ่งนี้</button>
@@ -2846,6 +2912,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const nextOrder = nextSameTripIndex >= 0 ? rowOrderValue(rowsCache[nextSameTripIndex], nextSameTripIndex) : NaN;
       await addRow({
         tripNo: row.tripNo,
+        transportCompany:row.transportCompany||"",
+        batchIssue:row.batchIssue||"none",
+        batchIssueNote:row.batchIssueNote||"",
+        tripStatus:row.tripStatus||"",
         productName: "",
         batchNo: "",
         tankCode: "",
@@ -3090,7 +3160,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const booking=currentPage===OUTBOUND_PAGE?`<div class="mobile-trip-sub">Booking ${escapeHtml(first.bookingNo||'—')}</div>`:'';
         const facts=(label,value,full=false)=>`<div${full?' class="mobile-full"':''}><dt>${label}</dt><dd>${escapeHtml(value??'—')}</dd></div>`;
         return `<details class="mobile-trip" data-trip-key="${escapeAttr(key)}" ${expandedTrips.has(key)?'open':''}><summary><div><strong class="mobile-trip-title">${escapeHtml(title)}</strong>${booking}<div class="mobile-trip-sub">${rows.length} รายการ • ${fmt(bags)} ถุง • ${fmt(kg,2)} กก.</div><div class="mobile-trip-sub">${escapeHtml(status?TRIP_STATUS[status].short:'ยังไม่เลือกสถานะ')}</div></div></summary><div class="mobile-trip-body">
-          <div class="mobile-trip-actions"><button type="button" class="good" data-mobile-action="trip-status" data-status="ok" data-row-id="${escapeAttr(first.id)}">ตรงแผน</button><button type="button" class="secondary" data-mobile-action="trip-status" data-status="mismatch" data-row-id="${escapeAttr(first.id)}">ไม่ตรงแผน</button></div>
+          <div class="mobile-trip-actions"><button type="button" class="good" data-mobile-action="trip-status" data-status="ok" data-row-id="${escapeAttr(first.id)}">ตรงแผน</button><button type="button" class="secondary" data-mobile-action="trip-status" data-status="mismatch" data-row-id="${escapeAttr(first.id)}">ไม่ตรงแผน</button><button type="button" data-mobile-action="trip-details" data-row-id="${escapeAttr(first.id)}">🚚 บริษัท / ปัญหาแบช</button></div>
           ${rows.map((row,index)=>`<article class="mobile-item"><h3>${index+1}. ${escapeHtml(row.productName||'ยังไม่ระบุสินค้า')}</h3><dl class="mobile-facts">
             ${facts('แบช',row.batchNo||'—')}${facts('Tank',row.tankCode||'—')}${facts('จำนวนถุง',fmt(num(row.bags)))}${facts('น้ำหนัก (กก.)',fmt(num(row.kg),2))}${facts('ประเภทบรรจุ',row.packType||'—')}
             ${currentPage===OUTBOUND_PAGE?facts('จำนวนต้นทาง',row.sourceQty||'—')+facts('สถานะสต็อก',row.inventoryStatus||'—'):facts('พาเลท',row.pallets||'—')}
@@ -3138,6 +3208,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       btn.disabled=true;
       try{
         if(action==='edit')openRowEditor(id);
+         if(action==='trip-details')openTripMeta(id);
         if(action==='trip-status')await setTripStatus(id,btn.dataset.status);
         if(action==='trip-rollover')await rolloverTripToNextWorkingDay(id);
         if(action==='insert-item')await insertItemAfter(id);
@@ -6612,6 +6683,7 @@ ${err?.message || err}
       if(btn.dataset.action === "insert-item") insertItemAfter(btn.dataset.id);
       if(btn.dataset.action === "insert-trip") insertTripAfter(btn.dataset.id);
       if(btn.dataset.action === "trip-status") setTripStatus(btn.dataset.id, btn.dataset.status);
+       if(btn.dataset.action === "trip-details") openTripMeta(btn.dataset.id);
       if(btn.dataset.action === "trip-rollover") rolloverTripToNextWorkingDay(btn.dataset.id);
       if(btn.dataset.action === "dup") duplicateRow(btn.dataset.id);
       if(btn.dataset.action === "del") deleteRow(btn.dataset.id);
