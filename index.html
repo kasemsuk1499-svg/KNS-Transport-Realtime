@@ -1071,7 +1071,8 @@
   <dialog id="tripMetaDialog"><form id="tripMetaForm">
     <h2>🚚 บริษัทขนส่ง / ปัญหาแบชประจำคัน</h2>
     <p id="tripMetaContext" class="hint"></p>
-    <label>ชื่อบริษัทขนส่ง<input id="tripMetaCompany" maxlength="150" placeholder="กรอกชื่อบริษัทขนส่ง"></label>
+    <label>ชื่อบริษัทขนส่ง<select id="tripMetaCompany"><option value="">-- เลือกบริษัท --</option><option>KNS</option><option>มีโชค</option><option>จิรภัทร</option></select></label>
+    <button type="button" class="light" id="tripMetaCompanyAdd">+ เพิ่มชื่อบริษัทขนส่ง</button>
     <label>ปัญหาแบช<select id="tripMetaBatchIssue"><option value="none">ไม่มี</option><option value="small">แบชเล็ก</option><option value="large">แบชใหญ่</option><option value="both">ทั้งแบชเล็กและแบชใหญ่</option></select></label>
     <label>รายละเอียดปัญหา<textarea id="tripMetaBatchNote" maxlength="2000" placeholder="เลขแบช สาเหตุ หรือจำนวนที่ผิดปกติ"></textarea></label>
     <p class="hint">บันทึกให้ทุกแถวของคันรถเดียวกันเพื่อใช้ทำรีพอร์ตจบวัน</p>
@@ -1280,6 +1281,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     import { createAudit } from './reports/audit.js';
+    import {CARRIER_PATH,DEFAULT_CARRIERS,carrierList,normalizeCarrier} from './reports/carriers.js';
     const { update, remove } = createAudit(db, {ref,get,push,update:rawUpdate,remove:rawRemove,serverTimestamp});
 
 
@@ -2407,6 +2409,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if(!company&&!label&&!note)return '';
       return '<span class="trip-meta-chip">'+(company?'🚚 '+escapeHtml(company):'ไม่ได้ระบุบริษัท')+(label?' • ⚠️ '+label:'')+(note?' • '+escapeHtml(note):'')+'</span>';
     }
+    let carrierStore={};
+    let knownCarriers=[...DEFAULT_CARRIERS];
+    function fillCarrierSelect(el,selected=''){
+      const names=carrierList(carrierStore,selected);
+      el.replaceChildren(new Option('-- เลือกบริษัท --',''),...names.map(name=>new Option(name,name)));
+      el.value=selected;
+    }
+    onValue(ref(db,CARRIER_PATH),snapshot=>{
+      carrierStore=snapshot.val()||{};
+      knownCarriers=carrierList(carrierStore);
+      if($('tripMetaDialog').open)fillCarrierSelect($('tripMetaCompany'),$('tripMetaCompany').value);
+    },error=>console.error('โหลดชื่อบริษัทขนส่งไม่ได้',error));
+    $('tripMetaCompanyAdd').onclick=async()=>{
+      const input=prompt('กรอกชื่อบริษัทขนส่งใหม่');
+      if(input===null)return;
+      const name=normalizeCarrier(input);
+      if(!name){alert('กรุณาระบุชื่อบริษัท');return;}
+      if(!knownCarriers.some(c=>c.toLocaleLowerCase('th-TH')===name.toLocaleLowerCase('th-TH'))){
+        const button=$('tripMetaCompanyAdd');button.disabled=true;
+        try{await set(push(ref(db,CARRIER_PATH)),{name,createdAt:serverTimestamp()});}
+        catch(error){alert('เพิ่มบริษัทขนส่งไม่สำเร็จ: '+error.message);return;}
+        finally{button.disabled=false;}
+      }
+      fillCarrierSelect($('tripMetaCompany'),name);
+    };
     let activeTripMetaId=null;
     function openTripMeta(id){
       if(hasPendingEdit()){alert('กรุณาบันทึก Location ก่อน');return;}
@@ -2417,7 +2444,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const note=same.find(r=>r.batchIssueNote)||row;
       activeTripMetaId=id;
       $('tripMetaContext').textContent=(currentPage===OUTBOUND_PAGE?'ตู้ ':'คัน ')+(row.tripNo||row.exportRound||'—')+' • '+currentPage+' • '+currentDate+' • '+same.length+' แถวสินค้า';
-      $('tripMetaCompany').value=company.transportCompany||'';
+      fillCarrierSelect($('tripMetaCompany'),company.transportCompany||'');
       $('tripMetaBatchIssue').value=['none','small','large','both'].includes(batch.batchIssue)?batch.batchIssue:'none';
       $('tripMetaBatchNote').value=note.batchIssueNote||'';
       $('tripMetaError').textContent='';
@@ -2868,7 +2895,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const productName = prefill.productName ?? "";
       const knownLocation = currentPage !== OUTBOUND_PAGE && productName && tank ? await getKnownLocation(productName, tank) : null;
       const newRef = push(dateRef(currentDate));
-      await set(newRef, {
+      const newRow = {
         dateText: formatDateThaiLike(currentDate),
         tripNo: prefill.tripNo ?? nextTrip,
         productName,
@@ -2882,6 +2909,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         location: knownLocation?.location ?? prefill.location ?? "",
         locationUpdatedAt: knownLocation?.updatedAt ?? null,
         tripStatus: prefill.tripStatus ?? "",
+        transportCompany: prefill.transportCompany ?? "",
+        batchIssue: prefill.batchIssue ?? "none",
+        batchIssueNote: prefill.batchIssueNote ?? "",
         bookingNo: prefill.bookingNo ?? "",
         fclCount: prefill.fclCount ?? "",
         bookingDateText: prefill.bookingDateText ?? "",
@@ -2902,7 +2932,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         sortOrder: options.sortOrder ?? prefill.sortOrder ?? nextDefaultSortOrder(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
+      if(options.manualItem){
+        // Only direct '+ รายการ' actions are logged; CSV, copy, and new trips are not.
+        const id=push(ref(db,`knsTransport/reports/batchChanges/${currentDate}`)).key;
+        const event={
+          kind:'manual_item_added',reviewStatus:'needs_review',
+          page:currentPage,planDate:currentDate,rowId:newRef.key,
+          tripNo:String(newRow.tripNo||newRow.exportRound||'').trim(),
+          bookingNo:String(newRow.bookingNo||'').trim(),
+          productName:String(newRow.productName||'').trim(),
+          oldBatchNo:'',newBatchNo:String(newRow.batchNo||'').trim(),
+          createdAt:serverTimestamp()
+        };
+        await update(ref(db),{
+          [`${pageRoot()}/plans/${currentDate}/rows/${newRef.key}`]:newRow,
+          [`knsTransport/reports/batchChanges/${currentDate}/${id}`]:event
+        });
+      } else {
+        await set(newRef,newRow);
+      }
       if(productName) await saveProductOption(productName);
     }
 
@@ -2928,7 +2977,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         packType: "",
         remark: row.remark || "Plastic pallet (60)",
         location: ""
-      }, { sortOrder: orderBetween(currentOrder, nextOrder) });
+      }, { sortOrder: orderBetween(currentOrder, nextOrder), manualItem:true });
     }
 
     async function insertTripAfter(id){
