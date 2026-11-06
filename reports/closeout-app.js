@@ -15,8 +15,10 @@ const prettyPage=page=>page==='OUT'?'ส่งออก':page;
 let dayTrips=[],daySaved=null,dayLoaded='',dailyBusy=false;
 let weekData=null,weekSaved=null,weekStart='',weeklyBusy=false;
 
-$('day').value=thaiDate();
-$('weekDay').value=thaiDate();
+const requestedDay=new URLSearchParams(location.search).get('day')||'';
+const initialDay=/^\\d{4}-\\d{2}-\\d{2}$/.test(requestedDay)?requestedDay:thaiDate();
+$('day').value=initialDay;
+$('weekDay').value=initialDay;
 function renderMetrics(id,stats,savedDays){
   if(!stats){$(id).innerHTML='';return;}
   const metrics=[
