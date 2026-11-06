@@ -91,6 +91,52 @@ $('dayTrips').addEventListener('input',event=>{
   dayTrips[index][field]=el.value;
   if(field==='status'||field==='batchIssue')renderMetrics('dayStats',countTrips(dayTrips));
 });
+
+function batchTitle(kind){
+  return kind==='batch_edited'?'แก้เลขแบช':kind==='manual_item_added'?'เพิ่มรายการสินค้าโดยตรง':'เหตุการณ์แบช';
+}
+function batchStatus(value){
+  return value==='confirmed'?'ยืนยันเป็นปัญหา':value==='not_issue'?'งานปกติ / ไม่ใช่ปัญหา':'รอตรวจสอบ';
+}
+function renderBatchChanges(events){
+  $('batchChangeCount').textContent=number(events.length)+' เหตุการณ์';
+  $('batchChanges').innerHTML=events.map(event=>'<tr>'+
+    '<td>'+esc(event.createdAt?new Date(event.createdAt).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'กำลังยืนยันเวลา')+'</td>'+
+    '<td>'+esc(prettyPage(event.page))+' / '+esc(event.tripNo||'—')+(event.bookingNo?'<br>Booking '+esc(event.bookingNo):'')+'</td>'+
+    '<td>'+esc(batchTitle(event.kind))+'</td><td>'+esc(event.productName||'—')+'</td>'+
+    '<td>'+esc(event.oldBatchNo||'—')+' → '+esc(event.newBatchNo||'—')+'</td>'+
+    '<td><select data-batch-id="'+esc(event.id)+'"><option value="needs_review"'+(!['confirmed','not_issue'].includes(event.reviewStatus)?' selected':'')+'>รอตรวจสอบ</option>'+
+    '<option value="confirmed"'+(event.reviewStatus==='confirmed'?' selected':'')+'>ยืนยันเป็นปัญหา</option>'+
+    '<option value="not_issue"'+(event.reviewStatus==='not_issue'?' selected':'')+'>งานปกติ</option></select></td></tr>'
+  ).join('')||'<tr><td colspan="6" class="empty">ยังไม่มีเหตุการณ์แก้แบชหรือเพิ่มรายการโดยตรงในวันนี้</td></tr>';
+}
+$('batchChanges').addEventListener('change',async event=>{
+  const select=event.target.closest('[data-batch-id]');
+  if(!select)return;
+  const row=dayBatchEvents.find(item=>item.id===select.dataset.batchId);
+  if(!row||!dayLoaded){renderBatchChanges(dayBatchEvents);return;}
+  const value=select.value;
+  select.disabled=true;
+  try{
+    await update(ref(db,'knsTransport/reports/batchChanges/'+dayLoaded+'/'+row.id),{reviewStatus:value,reviewedAt:serverTimestamp()});
+    row.reviewStatus=value;
+  }catch(error){
+    alert('บันทึกผลตรวจสอบแบชไม่สำเร็จ: '+error.message);
+    renderBatchChanges(dayBatchEvents);
+  }finally{select.disabled=false;}
+});
+function renderWeekBatchEvents(){
+  $('weekBatchChanges').innerHTML=weekBatchEvents.map(e=>'<tr>'+
+    '<td>'+esc(e.planDate||e.day||'')+'</td><td>'+esc(prettyPage(e.page))+' / '+esc(e.tripNo||'—')+'</td>'+
+    '<td>'+esc(batchTitle(e.kind))+' • '+esc(e.productName||'—')+'</td>'+
+    '<td>'+esc(e.oldBatchNo||'—')+' → '+esc(e.newBatchNo||'—')+'</td>'+
+    '<td>'+esc(batchStatus(e.reviewStatus))+'</td></tr>').join('')||
+    '<tr><td colspan="5" class="empty">ไม่มีเหตุการณ์ในสัปดาห์นี้</td></tr>';
+}
+function flattenBatchEvents(raw){
+  return Object.entries(raw||{}).flatMap(([day,items])=>Object.entries(items||{}).map(([id,event])=>({...event,id,day})))
+    .sort((a,b)=>String(a.planDate||a.day).localeCompare(String(b.planDate||b.day)) || (a.createdAt||0)-(b.createdAt||0));
+}
 async function getPlans(day){
   const entries=await Promise.all(PAGES.map(async page=>{
     const path='knsTransport/pages/'+page+'/plans/'+day+'/rows';
@@ -209,12 +255,15 @@ async function loadWeek(){
   weeklyBusy=true;$('loadWeek').disabled=true;
   statusMessage('weekStatus','กำลังอ่านรายงานที่ปิดงานแล้ว 7 วัน…');
   try{
-    const [items,old]=await Promise.all([
+    const [items,old,batches]=await Promise.all([
       Promise.all(range.days.map(async day=>[day,(await get(closeoutRef(day))).val()])),
-      get(weeklyRef(range.start))
+      get(weeklyRef(range.start)),
+      rangeRead('knsTransport/reports/batchChanges',range.start,range.end)
     ]);
     const reports=Object.fromEntries(items);
     weekData=weeklyData(reports,range.days);
+    weekBatchEvents=flattenBatchEvents(batches.val());
+    renderWeekBatchEvents();
     weekStart=range.start;weekSaved=old.val()||null;
     $('weeklyNote').value=weekSaved?.note||'';
     renderWeek(range);
@@ -234,7 +283,7 @@ function renderWeek(range){
     '<td>'+esc(t.note||'')+'</td></tr>').join('');
 }
 $('loadWeek').onclick=loadWeek;
-$('weekDay').onchange=()=>{weekData=null;weekSaved=null;weekStart='';renderMetrics('weekStats',null);$('weekDays').innerHTML='<tr><td colspan="9" class="empty">กดรวบรวมรีพอร์ตสัปดาห์</td></tr>';$('weekTrips').innerHTML='<tr><td colspan="8">กรุณาเลือกรายงานสัปดาห์</td></tr>';statusMessage('weekStatus','กดรวบรวมรีพอร์ตสำหรับสัปดาห์ใหม่');};
+$('weekDay').onchange=()=>{weekData=null;weekSaved=null;weekStart='';weekBatchEvents=[];renderWeekBatchEvents();renderMetrics('weekStats',null);$('weekDays').innerHTML='<tr><td colspan="9" class="empty">กดรวบรวมรีพอร์ตสัปดาห์</td></tr>';$('weekTrips').innerHTML='<tr><td colspan="8">กรุณาเลือกรายงานสัปดาห์</td></tr>';statusMessage('weekStatus','กดรวบรวมรีพอร์ตสำหรับสัปดาห์ใหม่');};
 $('saveWeek').onclick=async()=>{
   if(weeklyBusy||!weekData||weekStart!==weekRange($('weekDay').value).start)return statusMessage('weekStatus','กรุณารวบรวมรีพอร์ตรายสัปดาห์ก่อน',true);
   if(!weekData.savedDays)return statusMessage('weekStatus','ยังไม่มีรีพอร์ตรายวันให้บันทึกรายสัปดาห์',true);
@@ -247,7 +296,7 @@ $('saveWeek').onclick=async()=>{
     const payload={start:weekStart,end:weekRange(weekStart).end,revision:(old?.revision||0)+1,
       createdAt:old?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),
       savedDays:weekData.savedDays,note:$('weeklyNote').value.trim(),totals:weekData.totals,
-      days:weekData.days,trips:weekData.trips};
+      days:weekData.days,trips:weekData.trips,batchChanges:weekBatchEvents};
     await set(weeklyRef(weekStart),payload);weekSaved=payload;
     statusMessage('weekStatus','บันทึกรีพอร์ตสัปดาห์ '+weekStart+' • ฉบับแก้ไข '+payload.revision+' เรียบร้อย',false,true);
   }catch(error){statusMessage('weekStatus','บันทึกไม่สำเร็จ: '+error.message,true);}
