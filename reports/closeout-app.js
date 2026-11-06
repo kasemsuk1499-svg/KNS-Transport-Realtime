@@ -16,7 +16,7 @@ let dayTrips=[],daySaved=null,dayLoaded='',dailyBusy=false;
 let weekData=null,weekSaved=null,weekStart='',weeklyBusy=false;
 
 const requestedDay=new URLSearchParams(location.search).get('day')||'';
-const initialDay=/^\\d{4}-\\d{2}-\\d{2}$/.test(requestedDay)?requestedDay:thaiDate();
+const initialDay=/^\d{4}-\d{2}-\d{2}$/.test(requestedDay)?requestedDay:thaiDate();
 $('day').value=initialDay;
 $('weekDay').value=initialDay;
 function renderMetrics(id,stats,savedDays){
