@@ -16,6 +16,7 @@ export function createAudit(db,api){
       grouped.get(rowPath).writes.push({field,value});
     }
     const changes=[];
+    const batchChanges=[];
     for(const [path,group] of grouped){
       const before=(await api.get(api.ref(db,path))).val();
       if(!before)continue; // New records are not edits.
@@ -28,12 +29,31 @@ export function createAudit(db,api){
         if(JSON.stringify(oldValue)!==JSON.stringify(newValue))fields.push({field,before:oldValue,after:newValue});
       }
       if(fields.length)changes.push({page:group.page,planDate:group.planDate,rowId:group.rowId,productName:before.productName||'',batchNo:before.batchNo||'',deleted:after===null,fields});
+      const batchEdited=fields.some(item=>item.field==='batchNo');
+      if(batchEdited && after && typeof after==='object'){
+        // Record observed batch edits without declaring that the new batch is wrong.
+        // The review status is deliberately neutral until a human checks it.
+        batchChanges.push({
+          kind:'batch_edited',reviewStatus:'needs_review',
+          page:group.page,planDate:group.planDate,rowId:group.rowId,
+          tripNo:String(after.tripNo || after.exportRound || before.tripNo || '').trim(),
+          bookingNo:String(after.bookingNo || before.bookingNo || '').trim(),
+          productName:String(after.productName || before.productName || '').trim(),
+          oldBatchNo:String(before.batchNo??''),newBatchNo:String(after.batchNo??''),
+          createdAt:api.serverTimestamp()
+        });
+      }
     }
     if(changes.length){
       const day=thaiDate();const key=api.push(api.ref(db,`knsTransport/reports/edits/${day}`)).key;
       patch[`knsTransport/reports/edits/${day}/${key}`]={day,createdAt:api.serverTimestamp(),changes};
     }
-    // Data and history succeed or fail together, with one atomic write.
+    for(const event of batchChanges){
+      const id=api.push(api.ref(db,`knsTransport/reports/batchChanges/${event.planDate}`)).key;
+      patch[`knsTransport/reports/batchChanges/${event.planDate}/${id}`]=event;
+    }
+    // Data, batch change log and edit history succeed or fail together.
+    // Auto logging is prospective; edits made before this release have no batch events.
     return api.update(api.ref(db),patch);
   }
   async function remove(target){
