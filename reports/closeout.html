@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KNS | สรุปจบงานและรายงานรายสัปดาห์</title>
+<style>
+:root{--ink:#18324a;--muted:#617487;--line:#d9e4ef;--bg:#f3f7fb;--navy:#163b60;--primary:#185888}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans Thai",Tahoma,system-ui,sans-serif}
+header{background:linear-gradient(120deg,#123650,#1b6388);color:white;padding:24px max(20px,calc((100vw - 1260px)/2))}
+header a{color:#e1f8ff}header h1{font-size:clamp(24px,3vw,34px);margin:8px 0 2px}header p{margin:0;color:#d3e3ef}
+main{max-width:1260px;padding:14px 20px 40px;margin:auto}.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:22px;margin:18px 0;box-shadow:0 5px 22px #1a466a0b}
+.panel h2{font-size:20px;margin:0 0 14px}.intro{font-size:13px;color:var(--muted)}.toolbar{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin:12px 0}
+label{display:flex;flex-direction:column;gap:5px;min-width:160px;font-weight:600;font-size:13px;color:#435c71}input,textarea,select{font:inherit;color:var(--ink);border:1px solid #bed0dd;border-radius:9px;background:#fff;padding:9px 11px;max-width:100%;width:100%}textarea{resize:vertical;min-height:54px}
+button{font:inherit;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;font-weight:650;background:var(--primary);color:white}button.alt{background:#e9f1f8;color:#244962}button.green{background:#177e62}button:disabled{opacity:.6;cursor:wait}
+.toolbar button{min-height:42px}.field-date{max-width:195px}.card-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:16px 0}
+.card-grid>div{background:#eef5fa;border:1px solid #e1edf4;border-radius:12px;padding:13px 12px;min-width:0}.card-grid strong{display:block;font-size:27px;line-height:1.4;color:#123d5c}.card-grid span{font-size:12px;color:#536a7c}
+.card-grid .danger{background:#fff0ed}.card-grid .danger strong{color:#af3f2e}
+.scroll{overflow:auto;max-width:100%}table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}th,td{padding:10px;border-bottom:1px solid #e5ecf3;text-align:left;vertical-align:top}th{background:#eaf3f9;color:#365b74;position:sticky;top:0;white-space:nowrap}td strong{white-space:nowrap}
+.trip-table{min-width:1240px}.trip-table input,.trip-table select,.trip-table textarea{min-width:110px;font-size:13px;padding:7px 8px}.trip-table textarea{min-width:175px}.trip-table .small-col{min-width:95px}
+#dailyNote{min-height:90px}.subhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.status{font-size:13px;margin:12px 0;color:#3c647c}.status.error{color:#b42318}.status.success{color:#127055}
+.pill{display:inline-block;padding:3px 9px;background:#e7f1fa;border-radius:999px;font-size:12px}.notice{border-left:4px solid #76aecf;background:#f2f9fe;padding:11px 14px;font-size:13px;border-radius:6px}.empty{padding:22px;color:var(--muted);text-align:center}
+.weekly-table{min-width:650px}.action-row{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
+@media(max-width:930px){.card-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:580px){main{padding:8px 10px 35px}.panel{padding:14px}.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{align-items:stretch}.toolbar>*{flex:1 1 150px}.toolbar button{flex:1 1 auto}h1{font-size:24px}}
+@media print{header,.toolbar,.action-row{display:none}.panel{box-shadow:none;break-inside:avoid}textarea{border:0}}
+</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<header><a href="../">← กลับหน้าแผน STP / PTR / ส่งออก</a><h1>🚛 สรุปจบงาน KNS</h1><p>บันทึกผลประจำวัน • ปัญหาแบช • ข้อมูลบริษัทขนส่ง • ฟีดแบ็ค • สรุปรายสัปดาห์</p></header>
+<main>
+<section class="panel">
+ <h2>1. ปิดงานประจำวัน</h2>
+ <p class="notice">ยอดนับเป็นจำนวน <strong>คัน/ตู้ที่ไม่ซ้ำภายในแต่ละหน้า STP, PTR, ส่งออก</strong> ไม่ใช่จำนวนแถวสินค้า • สามารถเปิดรายงานที่บันทึกแล้วกลับมาแก้ไขได้เสมอ โดยไม่เปลี่ยนข้อมูลแผนเดิม</p>
+ <div class="toolbar"><label class="field-date">วันที่ทำงาน<input id="day" type="date"></label><button id="loadDay">โหลดแผนและรีพอร์ต</button><button class="alt" id="resetToPlan">ดึงข้อมูลแผนล่าสุด</button></div>
+ <p id="dailyStatus" class="status" role="status">เลือกวันที่เพื่อโหลดข้อมูล</p><div id="dayStats" class="card-grid"></div>
+ <div class="subhead"><h2>รายละเอียดแต่ละคัน</h2><span id="dayRevision" class="pill">ยังไม่บันทึก</span></div>
+ <p class="intro">แก้ข้อมูลบริษัทขนส่ง สถานะ ปัญหาแบช และฟีดแบ็คจากหน้านี้เพื่อบันทึกลง <strong>รายงาน</strong> (ไม่เขียนทับแผนงานต้นฉบับ)</p>
+ <div class="scroll"><table class="trip-table"><thead><tr><th>หน้า / คัน</th><th>Booking / สินค้า</th><th>บริษัทขนส่ง</th><th>ผลการขนย้าย</th><th>ปัญหาแบช</th><th>รายละเอียดปัญหา</th><th>ฟีดแบ็คภายหลัง</th><th>การแก้ไข/ผลสรุป</th></tr></thead><tbody id="dayTrips"><tr><td colspan="8" class="empty">ยังไม่ได้เลือกวันที่</td></tr></tbody></table></div>
+ <label style="margin-top:15px">หมายเหตุภาพรวมสิ้นวัน<textarea id="dailyNote" maxlength="5000" placeholder="เช่น วันนี้รถไม่ตรงแผน 2 คัน เพราะแป้งแบชใหญ่ไม่พอ / สิ่งที่รอแก้ไข"></textarea></label>
+ <div class="action-row"><button id="saveDay" class="green">✓ บันทึกจบงานวันนี้</button><button id="excelDay" class="alt">ดาวน์โหลดรีพอร์ต Excel รายวัน</button></div>
+</section>
+<section class="panel">
+ <h2>2. สรุปรายสัปดาห์</h2>
+ <p class="intro">เลือกวันใดก็ได้ในสัปดาห์ ระบบรวมรายงานรายวันที่บันทึกแล้วตั้งแต่ <strong>วันจันทร์ถึงวันอาทิตย์</strong> และบอกวันที่ยังไม่มีรีพอร์ต ไม่ถือว่าเป็น 0 คันโดยอัตโนมัติ</p>
+ <div class="toolbar"><label class="field-date">เลือกวันที่ในสัปดาห์<input type="date" id="weekDay"></label><button id="loadWeek">รวบรวมรีพอร์ตสัปดาห์</button></div>
+ <p id="weekStatus" class="status" role="status">ยังไม่ได้เลือกรายสัปดาห์</p><div id="weekStats" class="card-grid"></div>
+ <div class="scroll"><table class="weekly-table"><thead><tr><th>วันที่</th><th>บันทึกแล้ว?</th><th>ทั้งหมด</th><th>ตรงแผน</th><th>ไม่ตรงแผน</th><th>เลื่อน</th><th>แบชเล็ก</th><th>แบชใหญ่</th><th>หมายเหตุ</th></tr></thead><tbody id="weekDays"><tr><td colspan="9" class="empty">ยังไม่โหลดสัปดาห์</td></tr></tbody></table></div>
+ <label style="margin-top:14px">ข้อสรุป / ฟีดแบ็คภาพรวมสัปดาห์<textarea id="weeklyNote" maxlength="5000" placeholder="ข้อสรุปประจำสัปดาห์ และแนวทางป้องกันปัญหาซ้ำ"></textarea></label>
+ <div class="action-row"><button id="saveWeek" class="green">✓ บันทึกรีพอร์ตสัปดาห์</button><button id="excelWeek" class="alt">ดาวน์โหลดรีพอร์ต Excel รายสัปดาห์</button></div>
+ <p class="intro">ไฟล์ Excel รายสัปดาห์มีทั้งชีทสรุป 7 วันและรายละเอียดทุกคันรวมฟีดแบ็ค โดยใช้ข้อมูลรายวันที่บันทึกไว้ล่าสุด</p>
+</section>
+</main>
+<script type="module" src="./closeout-app.js"></script>
+</body></html>
