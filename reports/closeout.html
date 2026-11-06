@@ -47,6 +47,9 @@ button{font:inherit;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;
  <div class="toolbar"><label class="field-date">เลือกวันที่ในสัปดาห์<input type="date" id="weekDay"></label><button id="loadWeek">รวบรวมรีพอร์ตสัปดาห์</button></div>
  <p id="weekStatus" class="status" role="status">ยังไม่ได้เลือกรายสัปดาห์</p><div id="weekStats" class="card-grid"></div>
  <div class="scroll"><table class="weekly-table"><thead><tr><th>วันที่</th><th>บันทึกแล้ว?</th><th>ทั้งหมด</th><th>ตรงแผน</th><th>ไม่ตรงแผน</th><th>เลื่อน</th><th>แบชเล็ก</th><th>แบชใหญ่</th><th>หมายเหตุ</th></tr></thead><tbody id="weekDays"><tr><td colspan="9" class="empty">ยังไม่โหลดสัปดาห์</td></tr></tbody></table></div>
+ <details style="margin-top:18px"><summary style="cursor:pointer;font-weight:700">ดูรายละเอียดทุกคันและฟีดแบ็คในสัปดาห์</summary>
+ <div class="scroll" style="margin-top:12px"><table class="weekly-table"><thead><tr><th>วันที่</th><th>หน้า / คัน</th><th>บริษัท</th><th>สถานะ</th><th>ปัญหาแบช</th><th>รายละเอียด</th><th>ฟีดแบ็ค</th><th>การแก้ไข</th></tr></thead><tbody id="weekTrips"><tr><td colspan="8">ยังไม่ได้รวบรวมรายงาน</td></tr></tbody></table></div>
+ </details>
  <label style="margin-top:14px">ข้อสรุป / ฟีดแบ็คภาพรวมสัปดาห์<textarea id="weeklyNote" maxlength="5000" placeholder="ข้อสรุปประจำสัปดาห์ และแนวทางป้องกันปัญหาซ้ำ"></textarea></label>
  <div class="action-row"><button id="saveWeek" class="green">✓ บันทึกรีพอร์ตสัปดาห์</button><button id="excelWeek" class="alt">ดาวน์โหลดรีพอร์ต Excel รายสัปดาห์</button></div>
  <p class="intro">ไฟล์ Excel รายสัปดาห์มีทั้งชีทสรุป 7 วันและรายละเอียดทุกคันรวมฟีดแบ็ค โดยใช้ข้อมูลรายวันที่บันทึกไว้ล่าสุด</p>
