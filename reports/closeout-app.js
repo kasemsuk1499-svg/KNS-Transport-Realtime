@@ -1,7 +1,8 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import {getDatabase,ref,get,set,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import {getDatabase,ref,get,set,update,push,query,orderByKey,startAt,endAt,onValue,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import {firebaseConfig} from './config.js';
 import {thaiDate} from './audit.js';
+import {CARRIER_PATH,DEFAULT_CARRIERS,carrierList,normalizeCarrier,carrierTotals,periodRange} from './carriers.js';
 import {PAGES,STATUS_LABELS,BATCH_LABELS,collectTrips,mergeWithSaved,countTrips,weekRange,weeklyData} from './closeout-core.js';
 
 const db=getDatabase(initializeApp(firebaseConfig));
@@ -11,14 +12,24 @@ const number=value=>Number(value||0).toLocaleString('th-TH',{maximumFractionDigi
 const statusMessage=(id,message,error=false,success=false)=>{const el=$(id);el.textContent=message;el.className='status'+(error?' error':success?' success':'');};
 const closeoutRef=day=>ref(db,'knsTransport/reports/closeouts/'+day);
 const weeklyRef=monday=>ref(db,'knsTransport/reports/weeklyCloseouts/'+monday);
+const batchRef=day=>ref(db,'knsTransport/reports/batchChanges/'+day);
+const rangeRead=(base,start,end)=>get(query(ref(db,base),orderByKey(),startAt(start),endAt(end)));
 const prettyPage=page=>page==='OUT'?'ส่งออก':page;
 let dayTrips=[],daySaved=null,dayLoaded='',dailyBusy=false;
 let weekData=null,weekSaved=null,weekStart='',weeklyBusy=false;
+let carrierStore={},carrierNames=[...DEFAULT_CARRIERS],carrierData=null,carrierRange=null,carrierBusy=false;
+let dayBatchEvents=[],weekBatchEvents=[];
+onValue(ref(db,CARRIER_PATH),snapshot=>{
+  carrierStore=snapshot.val()||{};
+  carrierNames=carrierList(carrierStore);
+  refreshCarrierSelectors();
+},error=>console.error('ไม่สามารถอ่านรายชื่อขนส่ง',error));
 
 const requestedDay=new URLSearchParams(location.search).get('day')||'';
 const initialDay=/^\d{4}-\d{2}-\d{2}$/.test(requestedDay)?requestedDay:thaiDate();
 $('day').value=initialDay;
 $('weekDay').value=initialDay;
+$('carrierDate').value=initialDay;
 function renderMetrics(id,stats,savedDays){
   if(!stats){$(id).innerHTML='';return;}
   const metrics=[
@@ -29,13 +40,42 @@ function renderMetrics(id,stats,savedDays){
 }
 const statusOptions=selected=>Object.entries(STATUS_LABELS).map(([v,l])=>'<option value="'+v+'"'+(selected===v?' selected':'')+'>'+esc(l)+'</option>').join('');
 const batchOptions=selected=>Object.entries(BATCH_LABELS).map(([v,l])=>'<option value="'+v+'"'+(selected===v?' selected':'')+'>'+esc(l)+'</option>').join('');
+const transportOptions=selected=>{
+  const names=carrierList(carrierStore,selected);
+  return '<option value="">-- เลือกขนส่ง --</option>'+names.map(name=>'<option value="'+esc(name)+'"'+(selected===name?' selected':'')+'>'+esc(name)+'</option>').join('');
+};
+function refreshCarrierSelectors(){
+  for(const select of $('dayTrips').querySelectorAll('select[data-field="transportCompany"]')){
+    const value=select.value;
+    select.innerHTML=transportOptions(value);
+    select.value=value;
+  }
+}
+$('dayTrips').addEventListener('click',async event=>{
+  const button=event.target.closest('[data-add-company]');if(!button)return;
+  const index=Number(button.closest('tr')?.dataset.index);
+  if(!Number.isInteger(index)||!dayTrips[index])return;
+  const raw=prompt('เพิ่มบริษัทขนส่งใหม่');
+  if(raw===null)return;
+  const name=normalizeCarrier(raw);
+  if(!name){alert('กรุณาระบุชื่อบริษัท');return;}
+  button.disabled=true;
+  try{
+    if(!carrierList(carrierStore).some(c=>c.toLocaleLowerCase('th-TH')===name.toLocaleLowerCase('th-TH'))){
+      await set(push(ref(db,CARRIER_PATH)),{name,createdAt:serverTimestamp()});
+    }
+    dayTrips[index].transportCompany=name;
+    renderDay();
+  }catch(error){alert('เพิ่มบริษัทขนส่งไม่สำเร็จ: '+error.message);}
+  finally{button.disabled=false;}
+});
 function renderDay(){
   renderMetrics('dayStats',countTrips(dayTrips));
   $('dayRevision').textContent=daySaved?'บันทึกแล้ว • ฉบับแก้ไข '+(daySaved.revision||1):'ยังไม่บันทึก';
   $('dayTrips').innerHTML=dayTrips.map((t,i)=>'<tr data-index="'+i+'">'+
     '<td><strong>'+esc(prettyPage(t.page))+' / '+esc(t.tripNo)+'</strong><br><span class="pill">'+number(t.items)+' แถวสินค้า</span><br>'+number(t.bags)+' ถุง</td>'+
     '<td>'+esc(t.bookingNo||'—')+'<br>'+esc((t.products||[]).join(', ')||'—')+'</td>'+
-    '<td><input data-field="transportCompany" maxlength="150" placeholder="บริษัทขนส่ง" value="'+esc(t.transportCompany)+'"></td>'+
+    '<td><div style="display:flex;gap:5px;align-items:flex-start"><select data-field="transportCompany" aria-label="บริษัทขนส่ง">'+transportOptions(t.transportCompany)+'</select><button type="button" data-add-company="1" class="alt" title="เพิ่มบริษัทขนส่ง" style="padding:8px 10px">+</button></div></td>'+
     '<td><select data-field="status">'+statusOptions(t.status)+'</select></td>'+
     '<td><select data-field="batchIssue">'+batchOptions(t.batchIssue)+'</select></td>'+
     '<td><textarea data-field="batchIssueNote" maxlength="2000" placeholder="เช่น แบชที่ควรมา / มาจริง">'+esc(t.batchIssueNote)+'</textarea></td>'+
@@ -71,8 +111,10 @@ async function loadDay(restore=true){
   dailyBusy=true;$('loadDay').disabled=true;$('resetToPlan').disabled=true;
   statusMessage('dailyStatus','กำลังอ่านแผน STP / PTR / ส่งออก และรายงานที่เคยบันทึก…');
   try{
-    const [source,snap]=await Promise.all([getPlans(day),get(closeoutRef(day))]);
+    const [source,snap,batches]=await Promise.all([getPlans(day),get(closeoutRef(day)),get(batchRef(day))]);
     daySaved=snap.val()||null;
+    dayBatchEvents=Object.entries(batches.val()||{}).map(([id,event])=>({...event,id})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderBatchChanges(dayBatchEvents);
     const fresh=collectTrips(source);
     // Once closed, the saved report is authoritative. Do not silently merge
     // later plan edits into a completed day's historical snapshot.
@@ -95,7 +137,7 @@ $('resetToPlan').onclick=()=>{
   if(dayTrips.some(t=>t.feedback||t.resolution)&&!confirm('ดึงข้อมูลแผนล่าสุดจะล้างฟีดแบ็คที่กำลังแก้ไขบนหน้าจอ (ไม่ลบรีพอร์ตที่บันทึกไว้) ต้องการดำเนินการต่อไหม?'))return;
   loadDay(false);
 };
-$('day').onchange=()=>{dayLoaded='';daySaved=null;dayTrips=[];$('dailyNote').value='';renderDay();statusMessage('dailyStatus','กดโหลดแผนและรีพอร์ตสำหรับวันที่เลือก');};
+$('day').onchange=()=>{dayLoaded='';daySaved=null;dayTrips=[];dayBatchEvents=[];renderBatchChanges([]);$('dailyNote').value='';renderDay();statusMessage('dailyStatus','กดโหลดแผนและรีพอร์ตสำหรับวันที่เลือก');};
 
 async function saveDaily(){
   if(dailyBusy||!dayLoaded||dayLoaded!==$('day').value)return statusMessage('dailyStatus','กรุณาโหลดข้อมูลวันที่นี้ก่อนบันทึก',true);
