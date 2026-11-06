@@ -222,12 +222,21 @@ function reportRows(trips){
     'ถุง':t.bags||0,'กก.':t.kg||0,'แถวสินค้า':t.items||0,'สินค้า':(t.products||[]).join(', ')
   }));
 }
+function batchExcelRows(events){
+  return events.map(event=>({
+    'วันที่':event.planDate||event.day||dayLoaded,'หน้า':prettyPage(event.page),
+    'คัน/ตู้':event.tripNo||'','Booking':event.bookingNo||'',
+    'เหตุการณ์':batchTitle(event.kind),'สินค้า':event.productName||'',
+    'แบชเดิม':event.oldBatchNo||'','แบชใหม่':event.newBatchNo||'',
+    'ตรวจสอบ':batchStatus(event.reviewStatus)
+  }));
+}
 function ensureXlsx(statusId){
   if(window.XLSX)return true;
   statusMessage(statusId,'โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วเปิดหน้าใหม่',true);
   return false;
 }
-function exportExcel(filename,summaryRows,tripRows){
+function exportExcel(filename,summaryRows,tripRows,batchRows=[]){
   const wb=window.XLSX.utils.book_new();
   const ws=window.XLSX.utils.json_to_sheet(summaryRows);
   ws['!cols']=[{wch:17},{wch:19},{wch:16},{wch:15},{wch:18},{wch:16},{wch:16},{wch:18},{wch:60}];
@@ -235,6 +244,11 @@ function exportExcel(filename,summaryRows,tripRows){
   const details=window.XLSX.utils.json_to_sheet(tripRows);
   details['!cols']=[{wch:15},{wch:12},{wch:15},{wch:20},{wch:25},{wch:19},{wch:25},{wch:50},{wch:50},{wch:45},{wch:12},{wch:14},{wch:12},{wch:40}];
   window.XLSX.utils.book_append_sheet(wb,details,'Trip Details');
+  if(batchRows.length){
+    const batchSheet=window.XLSX.utils.json_to_sheet(batchRows);
+    batchSheet['!cols']=[{wch:17},{wch:14},{wch:14},{wch:23},{wch:25},{wch:25},{wch:28},{wch:25}];
+    window.XLSX.utils.book_append_sheet(wb,batchSheet,'Batch Changes');
+  }
   window.XLSX.writeFile(wb,filename);
 }
 $('excelDay').onclick=()=>{
@@ -245,7 +259,7 @@ $('excelDay').onclick=()=>{
     'วันที่':dayLoaded,'ทั้งหมด':m.total,'ตรงแผน':m.ok,'ไม่ตรงแผน':m.mismatch,
     'เลื่อน':m.rollover,'ยังไม่ระบุ':m.pending,'แบชเล็ก':m.small,'แบชใหญ่':m.large,
     'หมายเหตุ':$('dailyNote').value.trim()
-  }],reportRows(dayTrips));
+  }],reportRows(dayTrips),batchExcelRows(dayBatchEvents));
 };
 async function loadWeek(){
   if(weeklyBusy)return;
@@ -312,7 +326,77 @@ $('excelWeek').onclick=()=>{
       'ไม่ตรงแผน':d.saved?d.mismatch:'','เลื่อน':d.saved?d.rollover:'',
       'ยังไม่ระบุ':d.saved?d.pending:'','แบชเล็ก':d.saved?d.small:'',
       'แบชใหญ่':d.saved?d.large:'','หมายเหตุ':d.note||''})),
-    reportRows(weekData.trips));
+    reportRows(weekData.trips),batchExcelRows(weekBatchEvents));
+};
+
+function renderCarrierReport(){
+  if(!carrierData){
+    $('carrierMetrics').innerHTML='';
+    $('carrierRows').innerHTML='<tr><td colspan="10" class="empty">ยังไม่รวบรวมข้อมูลช่วงนี้</td></tr>';
+    return;
+  }
+  const {carriers,total,reportDays}=carrierData;
+  $('carrierMetrics').innerHTML=[
+    ['รายวันที่ปิดงาน',reportDays],['วิ่งแล้ว',total.completed],
+    ['ตรงแผน',total.ok],['ไม่ตรงแผน',total.mismatch],
+    ['เลื่อน',total.rollover],['ยังไม่ระบุสถานะ',total.pending]
+  ].map(([label,count])=>'<div><span>'+esc(label)+'</span><strong>'+number(count)+'</strong></div>').join('');
+  $('carrierRows').innerHTML=carriers.map(t=>'<tr>'+
+    '<td><strong>'+esc(t.name)+'</strong></td><td><strong>'+number(t.completed)+'</strong></td>'+
+    '<td>'+number(t.ok)+'</td><td>'+number(t.mismatch)+'</td><td>'+number(t.rollover)+'</td>'+
+    '<td>'+number(t.pending)+'</td><td>'+number(t.assigned)+'</td>'+
+    '<td>'+number(t.byPage.STP)+'</td><td>'+number(t.byPage.PTR)+'</td><td>'+number(t.byPage.OUT)+'</td></tr>').join('')+
+    (carriers.length?'<tr><td><strong>รวมทั้งหมด</strong></td><td><strong>'+number(total.completed)+'</strong></td>'+
+    '<td>'+number(total.ok)+'</td><td>'+number(total.mismatch)+'</td><td>'+number(total.rollover)+'</td>'+
+    '<td>'+number(total.pending)+'</td><td>'+number(total.assigned)+'</td>'+
+    '<td>'+number(carriers.reduce((n,c)=>n+c.byPage.STP,0))+'</td>'+
+    '<td>'+number(carriers.reduce((n,c)=>n+c.byPage.PTR,0))+'</td>'+
+    '<td>'+number(carriers.reduce((n,c)=>n+c.byPage.OUT,0))+'</td></tr>':
+    '<tr><td colspan="10" class="empty">ไม่มีเที่ยวรถในรีพอร์ตปิดงานที่บันทึกไว้ในช่วงนี้</td></tr>');
+}
+async function loadCarrierReport(){
+  if(carrierBusy)return;
+  const date=$('carrierDate').value,period=$('carrierPeriod').value;
+  let range;
+  try{range=periodRange(period,date);}
+  catch(error){return statusMessage('carrierStatus','เลือกวันที่ที่ถูกต้องก่อน',true);}
+  carrierBusy=true;$('loadCarrierStats').disabled=true;
+  statusMessage('carrierStatus','กำลังรวมเที่ยวขนส่งจากรายงานที่ปิดงานแล้ว…');
+  try{
+    const snapshot=await rangeRead('knsTransport/reports/closeouts',range.start,range.end);
+    const raw=snapshot.val()||{};
+    carrierData={...carrierTotals(raw,range.start,range.end),reports:raw};
+    carrierRange={...range,period,date};
+    renderCarrierReport();
+    const label=period==='year'?'รายปี':period==='month'?'รายเดือน':'รายสัปดาห์';
+    statusMessage('carrierStatus',label+' '+range.start+' ถึง '+range.end+
+      ' • ปิดงานแล้ว '+carrierData.reportDays+' วัน • วิ่งแล้ว '+carrierData.total.completed+' เที่ยว'+
+      ' (แสดงเฉพาะวันที่มีการบันทึกจบงาน)',false,true);
+  }catch(error){
+    carrierData=null;carrierRange=null;renderCarrierReport();
+    statusMessage('carrierStatus','อ่านรีพอร์ตขนส่งไม่สำเร็จ: '+error.message,true);
+  }finally{carrierBusy=false;$('loadCarrierStats').disabled=false;}
+}
+$('loadCarrierStats').onclick=loadCarrierReport;
+const resetCarrier=()=>{carrierData=null;carrierRange=null;renderCarrierReport();statusMessage('carrierStatus','กรุณากดสรุปเที่ยวตามขนส่งเพื่อโหลดช่วงใหม่');};
+$('carrierPeriod').onchange=resetCarrier;
+$('carrierDate').onchange=resetCarrier;
+$('exportCarrierStats').onclick=()=>{
+  if(!carrierData || !carrierRange ||
+      $('carrierDate').value!==carrierRange.date ||
+      $('carrierPeriod').value!==carrierRange.period)
+    return statusMessage('carrierStatus','กรุณาโหลดรายงานช่วงเวลาที่ต้องการก่อนส่งออก',true);
+  if(!ensureXlsx('carrierStatus'))return;
+  const rows=carrierData.carriers.map(c=>({
+    'บริษัทขนส่ง':c.name,'วิ่งแล้ว':c.completed,'ตรงแผน':c.ok,
+    'ไม่ตรงแผน':c.mismatch,'เลื่อน':c.rollover,'รอยืนยัน':c.pending,
+    'รวมคันในรีพอร์ต':c.assigned,'STP':c.byPage.STP,'PTR':c.byPage.PTR,'ส่งออก':c.byPage.OUT,
+    'ช่วงเริ่ม':carrierRange.start,'ช่วงสิ้นสุด':carrierRange.end
+  }));
+  const details=Object.entries(carrierData.reports).flatMap(([date,report])=>
+    (Array.isArray(report?.trips)?report.trips:Object.values(report?.trips||{})).filter(Boolean).map(t=>({...t,day:date})));
+  exportExcel('KNS-Carrier-Trips-'+carrierRange.period+'-'+carrierRange.start+'-'+carrierRange.end+'.xlsx',rows,reportRows(details));
 };
 loadDay(true);
 loadWeek();
+loadCarrierReport();
