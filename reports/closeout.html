@@ -20,7 +20,7 @@ button{font:inherit;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;
 #dailyNote{min-height:90px}.subhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .status{font-size:13px;margin:12px 0;color:#3c647c}.status.error{color:#b42318}.status.success{color:#127055}
 .pill{display:inline-block;padding:3px 9px;background:#e7f1fa;border-radius:999px;font-size:12px}.notice{border-left:4px solid #76aecf;background:#f2f9fe;padding:11px 14px;font-size:13px;border-radius:6px}.empty{padding:22px;color:var(--muted);text-align:center}
-.weekly-table{min-width:650px}.action-row{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
+.weekly-table{min-width:650px}#carrierRows{font-variant-numeric:tabular-nums}#carrierSummaryPanel th{text-align:right}#carrierSummaryPanel th:first-child,#carrierSummaryPanel td:first-child{text-align:left}#carrierSummaryPanel td{text-align:right}#batchChanges select{min-width:135px;font-size:13px}.action-row{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
 @media(max-width:930px){.card-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:580px){main{padding:8px 10px 35px}.panel{padding:14px}.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{align-items:stretch}.toolbar>*{flex:1 1 150px}.toolbar button{flex:1 1 auto}h1{font-size:24px}}
 @media print{header,.toolbar,.action-row{display:none}.panel{box-shadow:none;break-inside:avoid}textarea{border:0}}
@@ -38,6 +38,9 @@ button{font:inherit;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;
  <div class="subhead"><h2>รายละเอียดแต่ละคัน</h2><span id="dayRevision" class="pill">ยังไม่บันทึก</span></div>
  <p class="intro">แก้ข้อมูลบริษัทขนส่ง สถานะ ปัญหาแบช และฟีดแบ็คจากหน้านี้เพื่อบันทึกลง <strong>รายงาน</strong> (ไม่เขียนทับแผนงานต้นฉบับ)</p>
  <div class="scroll"><table class="trip-table"><thead><tr><th>หน้า / คัน</th><th>Booking / สินค้า</th><th>บริษัทขนส่ง</th><th>ผลการขนย้าย</th><th>ปัญหาแบช</th><th>รายละเอียดปัญหา</th><th>ฟีดแบ็คภายหลัง</th><th>การแก้ไข/ผลสรุป</th></tr></thead><tbody id="dayTrips"><tr><td colspan="8" class="empty">ยังไม่ได้เลือกวันที่</td></tr></tbody></table></div>
+ <div class="subhead" style="margin-top:18px"><h2>ประวัติแก้ไขแบช / เพิ่มรายการโดยตรง</h2><span id="batchChangeCount" class="pill">0 เหตุการณ์</span></div>
+ <p class="intro">บันทึกอัตโนมัติเมื่อแก้เลขแบชหรือกด + รายการในหน้าแผน • การเพิ่มแถวไม่ได้แปลว่าผิดเสมอ จึงมีสถานะให้ตรวจสอบก่อนยืนยัน</p>
+ <div class="scroll"><table><thead><tr><th>เวลาบันทึก</th><th>หน้า / คัน</th><th>การเปลี่ยนแปลง</th><th>สินค้า</th><th>แบชเดิม → ใหม่</th><th>ผลตรวจสอบ</th></tr></thead><tbody id="batchChanges"><tr><td colspan="6" class="empty">ยังไม่ได้โหลดวันที่</td></tr></tbody></table></div>
  <label style="margin-top:15px">หมายเหตุภาพรวมสิ้นวัน<textarea id="dailyNote" maxlength="5000" placeholder="เช่น วันนี้รถไม่ตรงแผน 2 คัน เพราะแป้งแบชใหญ่ไม่พอ / สิ่งที่รอแก้ไข"></textarea></label>
  <div class="action-row"><button id="saveDay" class="green">✓ บันทึกจบงานวันนี้</button><button id="excelDay" class="alt">ดาวน์โหลดรีพอร์ต Excel รายวัน</button></div>
 </section>
@@ -50,9 +53,23 @@ button{font:inherit;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;
  <details style="margin-top:18px"><summary style="cursor:pointer;font-weight:700">ดูรายละเอียดทุกคันและฟีดแบ็คในสัปดาห์</summary>
  <div class="scroll" style="margin-top:12px"><table class="weekly-table"><thead><tr><th>วันที่</th><th>หน้า / คัน</th><th>บริษัท</th><th>สถานะ</th><th>ปัญหาแบช</th><th>รายละเอียด</th><th>ฟีดแบ็ค</th><th>การแก้ไข</th></tr></thead><tbody id="weekTrips"><tr><td colspan="8">ยังไม่ได้รวบรวมรายงาน</td></tr></tbody></table></div>
  </details>
+ <details style="margin-top:18px"><summary style="cursor:pointer;font-weight:700">ดูเหตุการณ์แก้แบช/เพิ่มรายการในสัปดาห์</summary>
+ <div class="scroll"><table><thead><tr><th>วันที่</th><th>หน้า/คัน</th><th>รายการ</th><th>แบชเดิม → ใหม่</th><th>การตรวจสอบ</th></tr></thead><tbody id="weekBatchChanges"><tr><td colspan="5">ยังไม่โหลดสัปดาห์</td></tr></tbody></table></div>
+ </details>
  <label style="margin-top:14px">ข้อสรุป / ฟีดแบ็คภาพรวมสัปดาห์<textarea id="weeklyNote" maxlength="5000" placeholder="ข้อสรุปประจำสัปดาห์ และแนวทางป้องกันปัญหาซ้ำ"></textarea></label>
  <div class="action-row"><button id="saveWeek" class="green">✓ บันทึกรีพอร์ตสัปดาห์</button><button id="excelWeek" class="alt">ดาวน์โหลดรีพอร์ต Excel รายสัปดาห์</button></div>
  <p class="intro">ไฟล์ Excel รายสัปดาห์มีทั้งชีทสรุป 7 วันและรายละเอียดทุกคันรวมฟีดแบ็ค โดยใช้ข้อมูลรายวันที่บันทึกไว้ล่าสุด</p>
+</section>
+<section class="panel" id="carrierSummaryPanel">
+<h2>3. เที่ยวรถแยกตามบริษัทขนส่ง</h2>
+<p class="intro">ใช้ข้อมูลจากรีพอร์ตปิดงานรายวันที่บันทึกแล้ว • “วิ่งแล้ว” = ตรงแผน + ไม่ตรงแผน • ไม่นับคันที่เลื่อนไปวันอื่นหรือยังไม่ได้ยืนยันเป็นเที่ยววิ่งแล้ว</p>
+<div class="toolbar">
+<label>ช่วงเวลารายงาน<select id="carrierPeriod"><option value="week">รายสัปดาห์</option><option value="month" selected>รายเดือน</option><option value="year">รายปี</option></select></label>
+<label class="field-date">เลือกวันในช่วงที่ต้องการ<input id="carrierDate" type="date"></label>
+<button id="loadCarrierStats">สรุปเที่ยวตามขนส่ง</button><button id="exportCarrierStats" class="alt">ดาวน์โหลด Excel</button>
+</div>
+<p id="carrierStatus" class="status">ยังไม่ได้โหลดข้อมูล</p><div class="card-grid" id="carrierMetrics"></div>
+<div class="scroll"><table><thead><tr><th>บริษัทขนส่ง</th><th>วิ่งแล้ว</th><th>ตรงแผน</th><th>ไม่ตรงแผน</th><th>เลื่อน</th><th>ยังไม่ระบุสถานะ</th><th>รวมคันในรีพอร์ต</th><th>STP</th><th>PTR</th><th>ส่งออก</th></tr></thead><tbody id="carrierRows"><tr><td colspan="10" class="empty">กดสรุปเที่ยวเพื่อแสดงข้อมูล</td></tr></tbody></table></div>
 </section>
 </main>
 <script type="module" src="./closeout-app.js"></script>
